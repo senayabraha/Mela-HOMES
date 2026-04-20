@@ -373,15 +373,14 @@ function TabBar({ tab, onChange, unreadSaved, unreadMessages }) {
   const items = [
     ['discover', Home, 'Shop'],
     ['saved', Heart, 'Saved'],
-    ['agents', Store, 'Agents'],
     ['messages', MessageCircle, 'Messages'],
     ['sell', PlusSquare, 'List'],
     ['account', UserRound, 'Account'],
   ];
 
   return (
-    <div className="sticky bottom-0 z-20 border-t border-white/10 bg-stone-950/95 px-2 py-2 backdrop-blur">
-      <div className="grid grid-cols-6 gap-1">
+    <div className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-white/10 bg-stone-950/95 px-2 py-2 backdrop-blur">
+      <div className="grid grid-cols-5 gap-1">
         {items.map(([key, Icon, label]) => {
           const active = tab === key;
           return (
@@ -2004,10 +2003,6 @@ export default function App() {
           requireAuth={Boolean(currentUserId)}
         />
       );
-    }
-
-    if (tab === 'agents') {
-      return <AgentsScreen listings={listings} onOpenListing={setSelectedListing} />;
     }
 
     if (tab === 'messages') {
