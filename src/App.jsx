@@ -33,13 +33,17 @@ import {
   ensureCurrentProfile,
   getCurrentProfile,
   getCurrentUserId,
+  loadThreadMessages,
   loadListings,
   loadSavedIds,
+  loadThreads,
   resetPassword,
+  sendThreadMessage,
   setCachedUser,
   signInWithEmail,
   signOut,
   signUpWithEmail,
+  startThreadForListing,
   toggleSaved,
   updateListing,
   updateProfile,
@@ -627,7 +631,7 @@ function Stat({ icon: Icon, label }) {
   );
 }
 
-function ResultListingCard({ listing, saved, onOpen, onToggleSave }) {
+function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) {
   return (
     <div className="bg-[#111216]">
       <button type="button" onClick={() => onOpen(listing)} className="block w-full text-left">
@@ -686,7 +690,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave }) {
           <button type="button" className="h-11 rounded-full bg-emerald-50 text-sm font-bold text-emerald-950">
             Call
           </button>
-          <button type="button" className="h-11 rounded-full bg-emerald-600 text-sm font-bold text-white">
+          <button type="button" onClick={() => onMessage(listing)} className="h-11 rounded-full bg-emerald-600 text-sm font-bold text-white">
             Send Message
           </button>
         </div>
@@ -695,7 +699,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave }) {
   );
 }
 
-function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters }) {
+function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const results = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
   return (
     <div className="min-h-screen bg-black pb-28">
@@ -738,6 +742,7 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
               saved={savedIds.includes(listing.id)}
               onOpen={onOpenListing}
               onToggleSave={onToggleSave}
+              onMessage={onMessage}
             />
           ))
         ) : (
@@ -750,7 +755,7 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
   );
 }
 
-function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedIds, onOpenListing, onToggleSave, onOpenFilters, resultsOpen, setResultsOpen }) {
+function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage, resultsOpen, setResultsOpen }) {
   const filtered = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
   const submit = () => {
     setQuery((value) => value.trim());
@@ -769,6 +774,7 @@ function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedI
         onOpenListing={onOpenListing}
         onToggleSave={onToggleSave}
         onOpenFilters={onOpenFilters}
+        onMessage={onMessage}
       />
     );
   }
@@ -870,7 +876,7 @@ function SavedScreen({ listings, savedIds, onOpenListing, onToggleSave, requireA
   );
 }
 
-function DetailScreen({ listing, saved, onBack, onToggleSave, ownListing, onEdit, onDelete }) {
+function DetailScreen({ listing, saved, onBack, onToggleSave, ownListing, onEdit, onDelete, onMessage }) {
   const info = [
     ['Property type', listing.propertyType],
     ['Listing type', listing.listingType],
@@ -965,7 +971,11 @@ function DetailScreen({ listing, saved, onBack, onToggleSave, ownListing, onEdit
               Delete
             </button>
           </div>
-        ) : null}
+        ) : (
+          <button type="button" onClick={() => onMessage(listing)} className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
+            Send Message
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1414,27 +1424,176 @@ function AgentsScreen({ listings, onOpenListing }) {
   );
 }
 
-function MessagesScreen({ currentUserId, onOpenAuth }) {
+function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpenAuth, onOpenListing, onToast }) {
+  const [threads, setThreads] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [draft, setDraft] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const activeThread = threads.find((thread) => thread.id === selectedThreadId) || threads[0] || null;
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setThreads([]);
+      setMessages([]);
+      return;
+    }
+    let active = true;
+    const run = async () => {
+      setLoading(true);
+      try {
+        const data = await loadThreads();
+        if (!active) return;
+        setThreads(data);
+        if (!selectedThreadId && data[0]) onSelectThread(data[0].id);
+      } catch (error) {
+        onToast(error.message || 'Could not load messages', 'error');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    run();
+    return () => {
+      active = false;
+    };
+  }, [currentUserId, selectedThreadId]);
+
+  useEffect(() => {
+    if (!activeThread?.id) {
+      setMessages([]);
+      return;
+    }
+    let active = true;
+    const run = async () => {
+      try {
+        const data = await loadThreadMessages(activeThread.id);
+        if (active) setMessages(data);
+      } catch (error) {
+        onToast(error.message || 'Could not load conversation', 'error');
+      }
+    };
+    run();
+    return () => {
+      active = false;
+    };
+  }, [activeThread?.id]);
+
+  const send = async (event) => {
+    event.preventDefault();
+    if (!activeThread) return;
+    setSending(true);
+    try {
+      const message = await sendThreadMessage(activeThread.id, draft);
+      setMessages((prev) => [...prev, message]);
+      setDraft('');
+    } catch (error) {
+      onToast(error.message || 'Could not send message', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const threadLabel = (thread) => {
+    const other = thread.buyer_id === currentUserId ? thread.seller : thread.buyer;
+    return other?.business_name || other?.name || other?.email || 'Conversation';
+  };
+
   return (
     <div className="pb-24">
       <TopBar title="Messages" subtitle="Conversations with sellers and renters" />
-      <div className="px-4 pt-4">
-        {currentUserId ? (
-          <EmptyState
-            title="Messaging is next"
-            text="The original car app has full buyer-seller threads. This screen is ready for that Supabase messaging flow in the next pass."
-          />
-        ) : (
+      <div className="space-y-4 px-4 pt-4">
+        {!currentUserId ? (
           <EmptyState
             title="Sign in to message sellers"
             text="After sign-in, your property conversations will live here."
             action="Sign in"
             onAction={onOpenAuth}
           />
+        ) : loading ? (
+          <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-8 text-center text-sm text-stone-400">Loading messages...</div>
+        ) : threads.length ? (
+          <>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {threads.map((thread) => (
+                <button
+                  key={thread.id}
+                  type="button"
+                  onClick={() => onSelectThread(thread.id)}
+                  className={`shrink-0 rounded-full border px-3 py-2 text-sm ${activeThread?.id === thread.id ? 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/10 bg-white/5 text-stone-300'}`}
+                >
+                  {threadLabel(thread)}
+                </button>
+              ))}
+            </div>
+
+            {activeThread ? (
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5">
+                <button type="button" onClick={() => activeThread.listing ? onOpenListing(rowToThreadListing(activeThread.listing)) : null} className="flex w-full items-center gap-3 border-b border-white/10 p-4 text-left">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-900">
+                    {activeThread.listing?.photos?.[0] ? <img src={activeThread.listing.photos[0]} alt="" className="h-full w-full object-cover" /> : null}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-white">{activeThread.listing?.title || activeThread.listing?.property_type || 'Property listing'}</div>
+                    <div className="mt-1 truncate text-xs text-stone-400">{threadLabel(activeThread)}</div>
+                  </div>
+                </button>
+
+                <div className="max-h-[48vh] space-y-3 overflow-y-auto p-4">
+                  {messages.length ? (
+                    messages.map((message) => {
+                      const mine = message.sender_id === currentUserId;
+                      return (
+                        <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${mine ? 'bg-emerald-500 text-stone-950' : 'bg-stone-950/70 text-stone-100'}`}>
+                            {message.body}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-8 text-center text-sm text-stone-400">Write the first message.</div>
+                  )}
+                </div>
+
+                <form onSubmit={send} className="flex gap-2 border-t border-white/10 p-3">
+                  <input
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder="Write a message"
+                    className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-stone-950/60 px-4 py-3 text-sm outline-none placeholder:text-stone-500"
+                  />
+                  <button type="submit" disabled={sending || !draft.trim()} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 disabled:opacity-50">
+                    {sending ? 'Sending' : 'Send'}
+                  </button>
+                </form>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <EmptyState title="No messages yet" text="Open a listing and tap Send Message to start a conversation." />
         )}
       </div>
     </div>
   );
+}
+
+function rowToThreadListing(row) {
+  const photos = Array.isArray(row.photos) ? row.photos : [];
+  return {
+    id: row.id,
+    title: row.title,
+    price: row.price,
+    currency: row.currency,
+    photos,
+    photoUrl: photos[0] || null,
+    propertyType: row.property_type,
+    listingType: row.listing_type,
+    location: row.location,
+    city: row.city,
+    area: row.area,
+    sellerId: row.seller_id,
+  };
 }
 
 function AccountScreen({ currentProfile, currentUserId, myListings, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved }) {
@@ -1641,6 +1800,7 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingListing, setEditingListing] = useState(null);
   const [resultsOpen, setResultsOpen] = useState(false);
+  const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const refreshListings = async () => {
@@ -1736,6 +1896,22 @@ export default function App() {
     }
   };
 
+  const handleStartMessage = async (listing) => {
+    if (!currentUserId) {
+      openAuth('signin');
+      return;
+    }
+    try {
+      const thread = await startThreadForListing(listing);
+      setSelectedThreadId(thread.id);
+      setSelectedListing(null);
+      setResultsOpen(false);
+      setTab('messages');
+    } catch (error) {
+      show(error.message || 'Could not start message', 'error');
+    }
+  };
+
   const openAuth = (mode = 'signin') => {
     setAuthMode(mode);
     setAuthOpen(true);
@@ -1750,6 +1926,7 @@ export default function App() {
           ownListing={selectedListing.sellerId === currentUserId}
           onBack={() => setSelectedListing(null)}
           onToggleSave={handleToggleSave}
+          onMessage={handleStartMessage}
           onEdit={() => {
             setEditingListing(selectedListing);
             setSelectedListing(null);
@@ -1772,6 +1949,7 @@ export default function App() {
           onOpenListing={setSelectedListing}
           onToggleSave={handleToggleSave}
           onOpenFilters={() => setFiltersOpen(true)}
+          onMessage={handleStartMessage}
           resultsOpen={resultsOpen}
           setResultsOpen={setResultsOpen}
         />
@@ -1795,7 +1973,16 @@ export default function App() {
     }
 
     if (tab === 'messages') {
-      return <MessagesScreen currentUserId={currentUserId} onOpenAuth={() => openAuth('signin')} />;
+      return (
+        <MessagesScreen
+          currentUserId={currentUserId}
+          selectedThreadId={selectedThreadId}
+          onSelectThread={setSelectedThreadId}
+          onOpenAuth={() => openAuth('signin')}
+          onOpenListing={setSelectedListing}
+          onToast={show}
+        />
+      );
     }
 
     if (tab === 'sell') {

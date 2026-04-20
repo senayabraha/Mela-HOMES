@@ -102,6 +102,78 @@ export async function uploadPhoto(file) {
   return data.publicUrl;
 }
 
+/* ---------- MESSAGES ---------- */
+
+export async function loadThreads() {
+  const userId = await uid();
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('threads')
+    .select(`
+      *,
+      listing:listings(id, title, price, currency, photos, property_type, listing_type, location, city, area, seller_id),
+      buyer:profiles!buyer_id(id, name, email, phone),
+      seller:profiles!seller_id(id, name, email, phone, business_name)
+    `)
+    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function loadThreadMessages(threadId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*, sender:profiles!sender_id(id, name, email)')
+    .eq('thread_id', threadId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function startThreadForListing(listing) {
+  const userId = await uid();
+  if (!userId) throw new Error('You must be signed in to message sellers.');
+  await ensureCurrentProfile();
+
+  const sellerId = listing.sellerId || listing.seller_id;
+  if (!sellerId) throw new Error('This listing does not have a seller yet.');
+  if (sellerId === userId) throw new Error('You cannot message yourself about your own listing.');
+
+  const { data: existing, error: existingError } = await supabase
+    .from('threads')
+    .select('id')
+    .eq('listing_id', listing.id)
+    .eq('buyer_id', userId)
+    .eq('seller_id', sellerId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return existing;
+
+  const { data, error } = await supabase
+    .from('threads')
+    .insert({ listing_id: listing.id, buyer_id: userId, seller_id: sellerId })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function sendThreadMessage(threadId, body) {
+  const userId = await uid();
+  if (!userId) throw new Error('You must be signed in to send messages.');
+  const text = body.trim();
+  if (!text) throw new Error('Write a message first.');
+
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({ thread_id: threadId, sender_id: userId, body: text })
+    .select('*, sender:profiles!sender_id(id, name, email)')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /* ---------- AUTH ---------- */
 
 export async function getCurrentUserId() {
