@@ -66,12 +66,6 @@
   background-color: var(--app-overlay) !important;
 }
 
-.theme-light .bg-black\/35,
-.theme-light .bg-stone-950\/75 {
-  background-color: rgba(15, 23, 42, 0.78) !important;
-  color: #ffffff !important;
-}
-
 .theme-light [class~="bg-[#111216]"],
 .theme-light [class~="bg-[#15161b]"],
 .theme-light [class~="bg-[#17181b]"],
@@ -108,35 +102,6 @@
   color: var(--app-text) !important;
 }
 
-.theme-light .text-emerald-100,
-.theme-light .text-emerald-200,
-.theme-light .text-emerald-300,
-.theme-light .text-emerald-400,
-.theme-light .text-emerald-500 {
-  color: #047857 !important;
-}
-
-.theme-light .text-amber-100,
-.theme-light .text-amber-200,
-.theme-light .text-amber-300,
-.theme-light .text-amber-400 {
-  color: #a16207 !important;
-}
-
-.theme-light .text-red-100,
-.theme-light .text-red-200,
-.theme-light .text-red-300,
-.theme-light .text-red-400 {
-  color: #dc2626 !important;
-}
-
-.theme-light .bg-emerald-300.text-emerald-950,
-.theme-light .bg-emerald-500.text-stone-950,
-.theme-light .bg-emerald-600.text-stone-950,
-.theme-light .bg-emerald-700.text-stone-950 {
-  color: #052e16 !important;
-}
-
 .theme-light .bg-emerald-500 .text-stone-950,
 .theme-light .bg-emerald-600 .text-stone-950,
 .theme-light .bg-emerald-700 .text-stone-950,
@@ -146,69 +111,15 @@
   color: #052e16 !important;
 }
 
-.theme-light .bg-stone-950\/75,
-.theme-light .bg-stone-950\/75.text-white,
-.theme-light .bg-stone-950\/75.text-stone-200,
-.theme-light .bg-black\/35,
-.theme-light .bg-black\/35.text-white {
-  color: #ffffff !important;
-}
-
-.theme-light .bg-stone-950\/75 svg,
-.theme-light .bg-black\/35 svg {
-  color: #ffffff !important;
-}
-
 .theme-light .border-white\/10,
 .theme-light .border-white\/15,
 .theme-light .border-white\/25,
-.theme-light .border-emerald-400,
-.theme-light .border-emerald-500\/30,
-.theme-light .border-emerald-500\/40,
-.theme-light .border-amber-500\/30,
-.theme-light .border-amber-500\/40,
-.theme-light .border-red-500\/30,
-.theme-light .border-red-500\/40,
 .theme-light .border-stone-800,
 .theme-light .border-stone-900,
 .theme-light .border-neutral-700,
 .theme-light .border-neutral-800,
 .theme-light .border-neutral-900 {
   border-color: var(--app-border) !important;
-}
-
-.theme-light .border-emerald-400,
-.theme-light .border-emerald-500\/30,
-.theme-light .border-emerald-500\/40 {
-  border-color: rgba(16, 185, 129, 0.55) !important;
-}
-
-.theme-light .border-amber-500\/30,
-.theme-light .border-amber-500\/40 {
-  border-color: rgba(245, 158, 11, 0.55) !important;
-}
-
-.theme-light .border-red-500\/30,
-.theme-light .border-red-500\/40 {
-  border-color: rgba(220, 38, 38, 0.45) !important;
-}
-
-.theme-light .bg-emerald-400\/15,
-.theme-light .bg-emerald-500\/10,
-.theme-light .bg-emerald-500\/15 {
-  background-color: rgba(209, 250, 229, 0.82) !important;
-}
-
-.theme-light .bg-amber-500\/5,
-.theme-light .bg-amber-500\/10,
-.theme-light .bg-amber-500\/15,
-.theme-light .bg-amber-500\/20 {
-  background-color: rgba(254, 243, 199, 0.72) !important;
-}
-
-.theme-light .bg-red-500\/10,
-.theme-light .bg-red-500\/15 {
-  background-color: rgba(254, 226, 226, 0.72) !important;
 }
 
 .theme-light input,
