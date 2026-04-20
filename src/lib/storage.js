@@ -174,6 +174,24 @@ export async function sendThreadMessage(threadId, body) {
   return data;
 }
 
+export async function loadUnreadMessageCount(readAtByThread = {}) {
+  const userId = await uid();
+  if (!userId) return 0;
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, thread_id, sender_id, created_at, thread:threads!inner(buyer_id, seller_id)')
+    .neq('sender_id', userId)
+    .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`, { foreignTable: 'thread' })
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  return (data || []).filter((message) => {
+    const readAt = readAtByThread[message.thread_id];
+    return !readAt || new Date(message.created_at).getTime() > readAt;
+  }).length;
+}
+
 /* ---------- AUTH ---------- */
 
 export async function getCurrentUserId() {

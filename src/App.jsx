@@ -33,6 +33,7 @@ import {
   ensureCurrentProfile,
   getCurrentProfile,
   getCurrentUserId,
+  loadUnreadMessageCount,
   loadThreadMessages,
   loadListings,
   loadSavedIds,
@@ -368,7 +369,7 @@ function TopBar({ title, right, subtitle }) {
   );
 }
 
-function TabBar({ tab, onChange, unreadSaved }) {
+function TabBar({ tab, onChange, unreadSaved, unreadMessages }) {
   const items = [
     ['discover', Home, 'Shop'],
     ['saved', Heart, 'Saved'],
@@ -395,6 +396,11 @@ function TabBar({ tab, onChange, unreadSaved }) {
               {key === 'saved' && unreadSaved > 0 ? (
                 <span className="absolute right-3 top-2 rounded-full bg-emerald-500 px-1.5 text-[10px] text-white">
                   {unreadSaved}
+                </span>
+              ) : null}
+              {key === 'messages' && unreadMessages > 0 ? (
+                <span className="absolute right-3 top-2 rounded-full bg-emerald-500 px-1.5 text-[10px] text-white">
+                  {unreadMessages > 9 ? '9+' : unreadMessages}
                 </span>
               ) : null}
             </button>
@@ -1801,6 +1807,8 @@ export default function App() {
   const [editingListing, setEditingListing] = useState(null);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState(null);
+  const [readAtByThread, setReadAtByThread] = useState({});
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const refreshListings = async () => {
@@ -1865,6 +1873,36 @@ export default function App() {
     window.addEventListener('mela:navigate', handleNavigate);
     return () => window.removeEventListener('mela:navigate', handleNavigate);
   }, []);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setUnreadMessages(0);
+      setReadAtByThread({});
+      return undefined;
+    }
+
+    let active = true;
+    const refreshUnread = async () => {
+      try {
+        const count = await loadUnreadMessageCount(readAtByThread);
+        if (active) setUnreadMessages(count);
+      } catch (error) {
+        console.error('loadUnreadMessageCount:', error);
+      }
+    };
+
+    refreshUnread();
+    const timer = window.setInterval(refreshUnread, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [currentUserId, readAtByThread]);
+
+  useEffect(() => {
+    if (tab !== 'messages' || !selectedThreadId) return;
+    setReadAtByThread((prev) => ({ ...prev, [selectedThreadId]: Date.now() }));
+  }, [tab, selectedThreadId]);
 
   const myListings = useMemo(() => listings.filter((listing) => currentUserId && listing.sellerId === currentUserId), [currentUserId, listings]);
 
@@ -2030,6 +2068,8 @@ export default function App() {
           setCurrentUserId(null);
           setCurrentProfile(null);
           setSavedIds([]);
+          setReadAtByThread({});
+          setUnreadMessages(0);
           show('Signed out', 'info');
         }}
       />
@@ -2043,7 +2083,7 @@ export default function App() {
       ) : (
         <>
           {content()}
-          {!selectedListing ? <TabBar tab={tab} onChange={(nextTab) => { setTab(nextTab); if (nextTab !== 'sell') setEditingListing(null); if (nextTab !== 'discover') setResultsOpen(false); }} unreadSaved={savedIds.length} /> : null}
+          {!selectedListing ? <TabBar tab={tab} onChange={(nextTab) => { setTab(nextTab); if (nextTab !== 'sell') setEditingListing(null); if (nextTab !== 'discover') setResultsOpen(false); }} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
         </>
       )}
 
