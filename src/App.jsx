@@ -4,6 +4,7 @@ import {
   BedDouble,
   Building2,
   Camera,
+  ChevronLeft,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -20,6 +21,8 @@ import {
   Ruler,
   Search,
   Share2,
+  Shield,
+  Star,
   Store,
   Trash2,
   UserRound,
@@ -29,8 +32,17 @@ import {
 import { supabase } from './lib/supabase';
 import {
   createListing,
+  adminDeleteListing,
+  adminUpdateListing,
+  adminUpdateProfile,
+  adminUpdateReport,
   deleteListing,
   ensureCurrentProfile,
+  getAdminStats,
+  getAllListings,
+  getAllReports,
+  getAllUsers,
+  getCurrentUser,
   getCurrentProfile,
   getCurrentUserId,
   loadUnreadMessageCount,
@@ -140,6 +152,7 @@ const PRICE_MIN_BOUND = 0;
 const PRICE_MAX_BOUND = 100000000;
 const SIZE_MIN_BOUND = 0;
 const SIZE_MAX_BOUND = 5000;
+const ADMIN_EMAILS = ['senayabraha.w@gmail.com'];
 
 const INITIAL_FILTERS = {
   listingType: '',
@@ -257,6 +270,14 @@ function formatCompactMoney(value, currency = 'ETB') {
   if (value >= 1000000) return `${currency} ${(value / 1000000).toFixed(value % 1000000 === 0 ? 0 : 1)}M`;
   if (value >= 1000) return `${currency} ${(value / 1000).toFixed(0)}K`;
   return `${currency} ${Number(value).toLocaleString()}`;
+}
+
+function normalizeEmail(value) {
+  return String(value || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function isAdminProfile(profile, authEmail = '') {
+  return profile?.is_admin === true || ADMIN_EMAILS.includes(normalizeEmail(profile?.email)) || ADMIN_EMAILS.includes(normalizeEmail(authEmail));
 }
 
 function matchesFilters(listing, query, filters) {
@@ -656,6 +677,81 @@ function ListingCard({ listing, saved, onOpen, onToggleSave, ownListing }) {
   );
 }
 
+function FeaturedListingCard({ listing, saved, onOpen, onToggleSave }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+      <button type="button" onClick={() => onOpen(listing)} className="block w-full text-left">
+        <div className="relative h-28 bg-stone-900">
+          {listing.photoUrl ? (
+            <img src={listing.photoUrl} alt={listingTitle(listing)} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#1c2d25,#171717)]">
+              <Home className="h-9 w-9 text-stone-500" />
+            </div>
+          )}
+          <div className="absolute left-2 top-2 rounded-full bg-stone-950/75 px-2 py-1 text-[10px] text-stone-200">{listing.listingType}</div>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleSave(listing.id);
+            }}
+            className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-stone-950/75 text-white"
+          >
+            <Heart className={`h-4 w-4 ${saved ? 'fill-emerald-500 text-emerald-500' : ''}`} />
+          </button>
+        </div>
+        <div className="space-y-1.5 p-3">
+          <h3 className="line-clamp-1 text-sm font-semibold text-white">{listingTitle(listing)}</h3>
+          <p className="line-clamp-1 text-xs text-stone-400">{listingLocation(listing) || 'Location not set'}</p>
+          <div className="truncate text-sm font-semibold text-emerald-300">{formatPrice(listing.price, listing.currency)}</div>
+          <div className="flex items-center gap-1 text-[11px] text-stone-300">
+            {listing.bedrooms ? <span>{listing.bedrooms} bed</span> : null}
+            {listing.bedrooms && listing.bathrooms ? <span>·</span> : null}
+            {listing.bathrooms ? <span>{listing.bathrooms} bath</span> : null}
+          </div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+function FeaturedListings({ listings, onOpen, savedIds, onToggleSave }) {
+  const scrollRef = React.useRef(null);
+  const scroll = (dir) => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollBy({
+      left: dir === 'left' ? -scrollRef.current.offsetWidth * 0.7 : scrollRef.current.offsetWidth * 0.7,
+      behavior: 'smooth',
+    });
+  };
+
+  if (!listings || listings.length === 0) return null;
+
+  return (
+    <div className="mb-2 mt-4 px-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">Featured</h2>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => scroll('left')} className="rounded-full bg-neutral-800 p-1.5">
+            <ChevronLeft className="h-4 w-4 text-white" />
+          </button>
+          <button type="button" onClick={() => scroll('right')} className="rounded-full bg-neutral-800 p-1.5">
+            <ChevronRight className="h-4 w-4 text-white" />
+          </button>
+        </div>
+      </div>
+      <div ref={scrollRef} className="no-scrollbar flex gap-2 overflow-x-auto scroll-smooth">
+        {listings.map((listing) => (
+          <div key={listing.id} className="min-w-[calc((100%-0.5rem)/2)] max-w-[calc((100%-0.5rem)/2)] shrink-0">
+            <FeaturedListingCard listing={listing} onOpen={onOpen} saved={savedIds.includes(listing.id)} onToggleSave={onToggleSave} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Stat({ icon: Icon, label }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1">
@@ -735,6 +831,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
 
 function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const results = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
+  const featuredListings = useMemo(() => listings.filter((listing) => listing.featured), [listings]);
   const activeFilters = countActiveFilters(filters);
   return (
     <div className="min-h-screen bg-black pb-28">
@@ -768,6 +865,8 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
         </div>
       </div>
 
+      <FeaturedListings listings={featuredListings} onOpen={onOpenListing} savedIds={savedIds} onToggleSave={onToggleSave} />
+
       <div className="mt-3 space-y-4">
         {results.length ? (
           results.map((listing) => (
@@ -791,8 +890,7 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
 }
 
 function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage, resultsOpen, setResultsOpen }) {
-  const filtered = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
-  const activeFilters = countActiveFilters(filters);
+  const featuredListings = useMemo(() => listings.filter((listing) => listing.featured), [listings]);
   const submit = () => {
     setQuery((value) => value.trim());
     setResultsOpen(true);
@@ -857,37 +955,7 @@ function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedI
           }
         }
       />
-      <div className="px-4">
-        <div className="mb-4 mt-6 flex gap-2 overflow-x-auto pb-1">
-          {LISTING_TYPES.map((item) => (
-            <Chip key={item} active={filters.listingType === item} onClick={() => setFilters((prev) => ({ ...prev, listingType: prev.listingType === item ? '' : item }))}>
-              {item}
-            </Chip>
-          ))}
-          {PROPERTY_TYPES.slice(0, 4).map((item) => (
-            <Chip key={item} active={filters.propertyType === item} onClick={() => setFilters((prev) => ({ ...prev, propertyType: prev.propertyType === item ? '' : item }))}>
-              {item}
-            </Chip>
-          ))}
-        </div>
-
-        <div className="mb-3 flex items-center justify-between">
-          <SectionTitle title={`${filtered.length} listings`} />
-          <button type="button" onClick={onOpenFilters} className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-700 text-white">
-            <Filter className="h-4 w-4" />
-            {activeFilters ? <span className="absolute -right-1 -top-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">{activeFilters}</span> : null}
-          </button>
-        </div>
-        <div className="space-y-4">
-          {filtered.length ? (
-            filtered.map((listing) => (
-              <ListingCard key={listing.id} listing={listing} saved={savedIds.includes(listing.id)} onOpen={onOpenListing} onToggleSave={onToggleSave} />
-            ))
-          ) : (
-            <EmptyState title="No properties yet" text="Try a broader search or clear some filters to see more listings." />
-          )}
-        </div>
-      </div>
+      <FeaturedListings listings={featuredListings} onOpen={onOpenListing} savedIds={savedIds} onToggleSave={onToggleSave} />
     </div>
   );
 }
@@ -1796,7 +1864,319 @@ function rowToThreadListing(row) {
   };
 }
 
-function AccountScreen({ currentProfile, currentUserId, myListings, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved }) {
+function AdminScreen({ onBack, onToast, onListingsChanged }) {
+  const [tab, setTab] = useState('listings');
+  const [stats, setStats] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [featuredFilter, setFeaturedFilter] = useState('all');
+  const [listingSearch, setListingSearch] = useState('');
+  const [featuredUpdatingIds, setFeaturedUpdatingIds] = useState(() => new Set());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [nextStats, nextUsers, nextListings, nextReports] = await Promise.all([
+          getAdminStats(),
+          getAllUsers(),
+          getAllListings(),
+          getAllReports(),
+        ]);
+        if (!active) return;
+        setStats(nextStats);
+        setUsers(nextUsers);
+        setListings(nextListings);
+        setReports(nextReports);
+      } catch (error) {
+        onToast(error.message || 'Could not load admin data', 'error');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [onToast]);
+
+  const handleDeleteListing = async (id) => {
+    if (!window.confirm('Delete this listing permanently?')) return;
+    try {
+      await adminDeleteListing(id);
+      setListings((prev) => prev.filter((listing) => listing.id !== id));
+      setStats((prev) => (prev ? { ...prev, listings: Math.max(0, prev.listings - 1) } : prev));
+      await onListingsChanged();
+      onToast('Listing deleted', 'success');
+    } catch (error) {
+      onToast(error.message || 'Delete failed', 'error');
+    }
+  };
+
+  const handleToggleDisable = async (user) => {
+    const disabled = !user.disabled;
+    try {
+      await adminUpdateProfile(user.id, { disabled });
+      setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, disabled } : item)));
+      onToast(disabled ? 'User disabled' : 'User enabled', 'success');
+    } catch (error) {
+      onToast(error.message || 'Could not update user', 'error');
+    }
+  };
+
+  const handleResolveReport = async (reportId, status) => {
+    try {
+      await adminUpdateReport(reportId, { status });
+      setReports((prev) => prev.map((report) => (report.id === reportId ? { ...report, status } : report)));
+      onToast(`Report marked ${status}`, 'success');
+    } catch (error) {
+      onToast(error.message || 'Could not update report', 'error');
+    }
+  };
+
+  const handleToggleFeatured = async (listing) => {
+    if (featuredUpdatingIds.has(listing.id)) return;
+    const featured = !listing.featured;
+    setFeaturedUpdatingIds((prev) => new Set(prev).add(listing.id));
+    try {
+      const adminId = await getCurrentUserId();
+      await adminUpdateListing(listing.id, {
+        featured,
+        featured_at: featured ? new Date().toISOString() : null,
+        featured_until: null,
+        featured_by: featured ? adminId : null,
+      });
+      setListings((prev) => prev.map((item) => (item.id === listing.id ? {
+        ...item,
+        featured,
+        featuredAt: featured ? Date.now() : null,
+        featuredUntil: null,
+        featuredBy: featured ? adminId : null,
+      } : item)));
+      await onListingsChanged();
+      onToast(featured ? 'Listing featured' : 'Listing removed from featured', 'success');
+    } catch (error) {
+      onToast(error.message || 'Could not update featured listing', 'error');
+    } finally {
+      setFeaturedUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(listing.id);
+        return next;
+      });
+    }
+  };
+
+  const featuredCount = useMemo(() => listings.filter((listing) => listing.featured).length, [listings]);
+  const filteredListings = useMemo(() => {
+    const text = listingSearch.trim().toLowerCase();
+    return listings.filter((listing) => {
+      if (featuredFilter === 'featured' && !listing.featured) return false;
+      if (featuredFilter === 'not_featured' && listing.featured) return false;
+      if (!text) return true;
+      const haystack = [
+        listingTitle(listing),
+        listing.propertyType,
+        listing.listingType,
+        listing.status,
+        listing.country,
+        listing.region,
+        listing.city,
+        listing.area,
+        listing.location,
+        listing.sellerName,
+        listing.sellerEmail,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(text);
+    });
+  }, [featuredFilter, listingSearch, listings]);
+
+  const tabClass = (value) => `relative flex-1 py-3 text-sm font-medium ${tab === value ? 'text-emerald-300' : 'text-stone-400'}`;
+  const statCard = (label, value, className = 'text-white') => (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className={`text-2xl font-bold ${className}`}>{value}</div>
+      <div className="mt-1 text-xs uppercase tracking-wide text-stone-500">{label}</div>
+    </div>
+  );
+
+  if (loading) {
+    return (
+      <div className="pb-24">
+        <TopBar title="Admin Dashboard" subtitle="Loading marketplace data" />
+        <div className="px-4 pt-8 text-center text-sm text-stone-400">Loading admin data...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pb-24">
+      <div className="sticky top-0 z-20 border-b border-white/10 bg-stone-950/90 px-4 py-4 backdrop-blur">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={onBack} className="rounded-full border border-white/10 bg-white/5 p-2">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-semibold">Admin Dashboard</h1>
+            <p className="text-xs text-stone-400">Manage your marketplace</p>
+          </div>
+          <Shield className="h-6 w-6 text-emerald-300" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
+        {stats ? (
+          <>
+            {statCard('Total Users', stats.users, 'text-emerald-300')}
+            {statCard('Listings', stats.listings)}
+            {statCard('Featured', featuredCount, featuredCount ? 'text-amber-300' : 'text-white')}
+            {statCard('Reports', stats.reports, stats.reports ? 'text-amber-300' : 'text-white')}
+            {statCard('Messages', stats.messages)}
+          </>
+        ) : null}
+      </div>
+
+      <div className="mt-5 grid grid-cols-3 border-b border-white/10">
+        {[
+          ['users', `Users (${users.length})`],
+          ['listings', `Listings (${listings.length})`],
+          ['reports', `Reports (${reports.length})`],
+        ].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)} className={tabClass(id)}>
+            {label}
+            {tab === id ? <span className="absolute inset-x-0 bottom-0 h-0.5 bg-emerald-500" /> : null}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'users' ? (
+        <div className="mt-2">
+          {users.length ? users.map((user) => {
+            const admin = isAdminProfile(user);
+            return (
+              <div key={user.id} className="flex items-center gap-3 border-b border-white/5 px-4 py-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/5">
+                  <UserRound className="h-5 w-5 text-stone-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{user.name || 'User'}</div>
+                  <div className="truncate text-xs text-stone-400">{user.email}</div>
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                    <span className="rounded bg-white/8 px-1.5 py-0.5 text-stone-300">{user.role || 'buyer'}</span>
+                    {admin ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">Admin</span> : null}
+                    {user.disabled ? <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-200">Disabled</span> : null}
+                  </div>
+                </div>
+                {!admin ? (
+                  <button type="button" onClick={() => handleToggleDisable(user)} className={`rounded-xl border px-3 py-2 text-xs ${user.disabled ? 'border-emerald-500/40 text-emerald-200' : 'border-red-500/40 text-red-200'}`}>
+                    {user.disabled ? 'Enable' : 'Disable'}
+                  </button>
+                ) : null}
+              </div>
+            );
+          }) : <EmptyState title="No users yet" text="User accounts will appear here." />}
+        </div>
+      ) : null}
+
+      {tab === 'listings' ? (
+        <div className="mt-2">
+          <div className="space-y-3 border-b border-white/5 px-4 py-3">
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-stone-950/60 px-3 py-2">
+              <Search className="h-4 w-4 shrink-0 text-stone-400" />
+              <input
+                value={listingSearch}
+                onChange={(event) => setListingSearch(event.target.value)}
+                placeholder="Search listings, sellers, location"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-stone-500"
+              />
+              {listingSearch ? (
+                <button type="button" onClick={() => setListingSearch('')} className="rounded-lg p-1 text-stone-400">
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <div className="flex gap-2 overflow-x-auto">
+              {[
+                ['all', `All (${listings.length})`],
+                ['featured', `Featured (${featuredCount})`],
+                ['not_featured', `Not featured (${listings.length - featuredCount})`],
+              ].map(([id, label]) => (
+                <button key={id} type="button" onClick={() => setFeaturedFilter(id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium ${featuredFilter === id ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-white/5 text-stone-400'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {filteredListings.length ? filteredListings.map((listing) => (
+            <div key={listing.id} className={`flex items-center gap-3 border-b px-4 py-3 ${listing.featured ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/5'}`}>
+              <div className="h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-white/5">
+                {listing.photos?.[0] ? (
+                  <img src={listing.photos[0]} alt={listingTitle(listing)} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Home className="h-5 w-5 text-stone-600" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="truncate text-sm font-medium">{listingTitle(listing)}</span>
+                  {listing.featured ? <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">Featured</span> : null}
+                </div>
+                <div className="truncate text-xs text-stone-400">{formatPrice(listing.price, listing.currency)} - {listing.location || listing.city || listing.country || 'No location'}</div>
+                <div className="truncate text-xs text-stone-500">Seller: {listing.sellerName || listing.sellerEmail || 'Unknown'}</div>
+                <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                  <span className="rounded bg-white/8 px-1.5 py-0.5 text-stone-300">{listing.status || 'active'}</span>
+                  {listing.createdAt ? <span className="rounded bg-white/8 px-1.5 py-0.5 text-stone-300">{new Date(listing.createdAt).toLocaleDateString()}</span> : null}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button type="button" disabled={featuredUpdatingIds.has(listing.id)} onClick={() => handleToggleFeatured(listing)} className={`rounded-lg border px-2 py-1 text-[10px] font-semibold disabled:opacity-50 ${listing.featured ? 'border-amber-500/40 bg-amber-500/20 text-amber-300' : 'border-white/10 bg-white/5 text-stone-400'}`}>
+                  <span className="inline-flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    {featuredUpdatingIds.has(listing.id) ? 'Saving' : listing.featured ? 'Unfeature' : 'Feature'}
+                  </span>
+                </button>
+                <button type="button" onClick={() => handleDeleteListing(listing.id)} className="rounded-lg border border-red-500/40 p-2 text-red-200">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )) : <EmptyState title="No listings match" text="Try a different admin search or filter." />}
+        </div>
+      ) : null}
+
+      {tab === 'reports' ? (
+        <div className="mt-2">
+          {reports.length ? reports.map((report) => {
+            const listing = listings.find((item) => item.id === report.listing_id);
+            const reporter = users.find((user) => user.id === report.reporter_id);
+            return (
+              <div key={report.id} className="border-b border-white/5 px-4 py-4">
+                <div className="text-sm font-medium">{listing ? listingTitle(listing) : 'Unknown listing'}</div>
+                <div className="mt-1 text-xs text-stone-400">Reported by: {reporter?.name || reporter?.email || 'Unknown'}</div>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-amber-200">{report.reason || 'Report'}</span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-stone-300">{report.status || 'pending'}</span>
+                </div>
+                {report.status === 'pending' || !report.status ? (
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <button type="button" onClick={() => handleResolveReport(report.id, 'resolved')} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-stone-950">Resolve</button>
+                    <button type="button" onClick={() => handleResolveReport(report.id, 'dismissed')} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-stone-300">Dismiss</button>
+                    {listing ? <button type="button" onClick={() => { handleDeleteListing(listing.id); handleResolveReport(report.id, 'resolved'); }} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white">Delete</button> : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          }) : <EmptyState title="No reports yet" text="Reported listings will appear here." />}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin }) {
   const [name, setName] = useState(currentProfile?.name || '');
   const [phone, setPhone] = useState(currentProfile?.phone || '');
   const [saving, setSaving] = useState(false);
@@ -1829,7 +2209,13 @@ function AccountScreen({ currentProfile, currentUserId, myListings, onOpenListin
               <div className="grid grid-cols-1 gap-3">
                 <InputField label="Name" value={name} onChange={setName} />
                 <InputField label="Phone" value={phone} onChange={setPhone} />
-                <div className="rounded-2xl bg-stone-950/40 px-4 py-3 text-sm text-stone-400">{currentProfile?.email || 'Signed in'}</div>
+                <div className="rounded-2xl bg-stone-950/40 px-4 py-3 text-sm text-stone-400">{currentProfile?.email || currentUserEmail || 'Signed in'}</div>
+                {isAdminProfile(currentProfile, currentUserEmail) ? (
+                  <button type="button" onClick={onOpenAdmin} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-3 text-sm font-semibold text-emerald-200">
+                    <Shield className="h-4 w-4" />
+                    Admin Dashboard
+                  </button>
+                ) : null}
                 <button type="button" onClick={saveProfile} disabled={saving} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
                   {saving ? 'Saving...' : 'Save profile'}
                 </button>
@@ -1992,6 +2378,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [currentProfile, setCurrentProfile] = useState(null);
   const [savedIds, setSavedIds] = useState([]);
   const [selectedListing, setSelectedListing] = useState(null);
@@ -1999,6 +2386,7 @@ export default function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingListing, setEditingListing] = useState(null);
+  const [adminOpen, setAdminOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const [readAtByThread, setReadAtByThread] = useState({});
@@ -2017,10 +2405,19 @@ export default function App() {
   const refreshProfile = async (userId) => {
     if (!userId) {
       setCurrentProfile(null);
+      setCurrentUserEmail('');
       setSavedIds([]);
       return;
     }
-    const [profile, saved] = await Promise.all([getCurrentProfile(userId), loadSavedIds(userId)]);
+    let profile = await getCurrentProfile(userId);
+    if (!profile) {
+      try {
+        profile = await ensureCurrentProfile();
+      } catch (error) {
+        console.error('ensureCurrentProfile:', error);
+      }
+    }
+    const saved = await loadSavedIds(userId);
     setCurrentProfile(profile);
     setSavedIds(saved);
   };
@@ -2029,11 +2426,13 @@ export default function App() {
     let active = true;
     const boot = async () => {
       try {
-        const userId = await getCurrentUserId();
+        const user = await getCurrentUser();
+        const userId = user?.id || null;
         const data = await loadListings();
         if (!active) return;
         setListings(data);
         setCurrentUserId(userId);
+        setCurrentUserEmail(user?.email || '');
         await refreshProfile(userId);
       } catch (error) {
         show(error.message || 'Could not load app', 'error');
@@ -2048,6 +2447,7 @@ export default function App() {
       setCachedUser(user);
       const userId = user?.id || null;
       setCurrentUserId(userId);
+      setCurrentUserEmail(user?.email || '');
       await refreshProfile(userId);
     });
 
@@ -2099,6 +2499,7 @@ export default function App() {
   }, [tab, selectedThreadId]);
 
   const myListings = useMemo(() => listings.filter((listing) => currentUserId && listing.sellerId === currentUserId), [currentUserId, listings]);
+  const isAdmin = isAdminProfile(currentProfile, currentUserEmail);
 
   const handleToggleSave = async (listingId) => {
     if (!currentUserId) {
@@ -2150,6 +2551,16 @@ export default function App() {
   };
 
   const content = () => {
+    if (adminOpen && isAdmin) {
+      return (
+        <AdminScreen
+          onBack={() => setAdminOpen(false)}
+          onToast={show}
+          onListingsChanged={refreshListings}
+        />
+      );
+    }
+
     if (selectedListing) {
       return (
         <DetailScreen
@@ -2238,9 +2649,10 @@ export default function App() {
     }
 
     return (
-      <AccountScreen
-        currentProfile={currentProfile}
-        currentUserId={currentUserId}
+        <AccountScreen
+          currentProfile={currentProfile}
+          currentUserId={currentUserId}
+          currentUserEmail={currentUserEmail}
         myListings={myListings}
         onOpenListing={setSelectedListing}
         onDeleteListing={handleDeleteListing}
@@ -2253,11 +2665,14 @@ export default function App() {
           await refreshProfile(currentUserId);
           show('Profile saved', 'success');
         }}
+        onOpenAdmin={() => setAdminOpen(true)}
         onSignOut={async () => {
           await signOut();
           setCurrentUserId(null);
+          setCurrentUserEmail('');
           setCurrentProfile(null);
           setSavedIds([]);
+          setAdminOpen(false);
           setReadAtByThread({});
           setUnreadMessages(0);
           show('Signed out', 'info');
@@ -2273,7 +2688,7 @@ export default function App() {
       ) : (
         <>
           {content()}
-          {!selectedListing ? <TabBar tab={tab} onChange={(nextTab) => { setTab(nextTab); if (nextTab !== 'sell') setEditingListing(null); if (nextTab !== 'discover') setResultsOpen(false); }} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
+          {!selectedListing && !adminOpen ? <TabBar tab={tab} onChange={(nextTab) => { setAdminOpen(false); setTab(nextTab); if (nextTab !== 'sell') setEditingListing(null); if (nextTab !== 'discover') setResultsOpen(false); }} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
         </>
       )}
 

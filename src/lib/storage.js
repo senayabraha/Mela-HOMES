@@ -12,6 +12,30 @@ import { supabase } from './supabase';
 */
 
 let _cachedUser = null;
+const ADMIN_EMAILS = ['senayabraha.w@gmail.com'];
+
+function normalizeEmail(value) {
+  return String(value || '').replace(/\s+/g, '').toLowerCase();
+}
+
+function withLocalAdmin(profile) {
+  if (!profile) return profile;
+  if (ADMIN_EMAILS.includes(normalizeEmail(profile.email))) {
+    return { ...profile, is_admin: true };
+  }
+  return profile;
+}
+
+function profileFromAuthUser(user) {
+  if (!user) return null;
+  return withLocalAdmin({
+    id: user.id,
+    email: user.email,
+    name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+    phone: user.user_metadata?.phone || null,
+    role: 'buyer',
+  });
+}
 
 export async function getCurrentUser() {
   if (_cachedUser) return _cachedUser;
@@ -229,13 +253,17 @@ export async function signOut() {
 export async function getCurrentProfile(userId) {
   const id = userId || await uid();
   if (!id) return null;
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', id)
     .maybeSingle();
-  if (error) { console.error('getCurrentProfile:', error); return null; }
-  return data;
+  if (error) {
+    console.error('getCurrentProfile:', error);
+    return user?.id === id ? profileFromAuthUser(user) : null;
+  }
+  return withLocalAdmin(data) || (user?.id === id ? profileFromAuthUser(user) : null);
 }
 
 export async function ensureCurrentProfile(profileData = {}) {
@@ -396,31 +424,41 @@ export async function getAllUsers() {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data || [];
+  return (data || []).map(withLocalAdmin);
 }
 
 export async function getAllListings() {
   const { data, error } = await supabase
     .from("listings")
-    .select("*")
+    .select("*, seller:profiles!seller_id(id, name, email, business_name)")
+    .order("featured", { ascending: false })
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data || []).map(r => ({
     id: r.id,
     sellerId: r.seller_id,
+    sellerName: r.seller?.business_name || r.seller?.name || "Seller",
+    sellerEmail: r.seller?.email || "",
     propertyType: r.property_type,
     listingType: r.listing_type,
     title: r.title,
     bedrooms: r.bedrooms,
+    bathrooms: r.bathrooms,
+    sizeSqm: r.size_sqm,
     price: r.price,
     currency: r.currency || "ETB",
     status: r.status,
     country: r.country,
     region: r.region,
     city: r.city,
+    area: r.area,
     location: r.location,
     photos: r.photos || [],
     featured: r.featured || false,
+    featuredAt: r.featured_at ? new Date(r.featured_at).getTime() : null,
+    featuredUntil: r.featured_until ? new Date(r.featured_until).getTime() : null,
+    featuredBy: r.featured_by || null,
+    featuredOrder: r.featured_order ?? null,
     createdAt: new Date(r.created_at).getTime(),
   }));
 }
@@ -446,6 +484,14 @@ export async function adminUpdateProfile(userId, updates) {
 
 export async function adminUpdateReport(reportId, updates) {
   const { error } = await supabase.from("reports").update(updates).eq("id", reportId);
+  if (error) throw error;
+}
+
+export async function adminUpdateListing(id, updates) {
+  const { error } = await supabase
+    .from("listings")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", id);
   if (error) throw error;
 }
 
