@@ -156,6 +156,25 @@ const INITIAL_FILTERS = {
   condition: null,
   sizeMin: null,
   sizeMax: null,
+  rentPeriod: null,
+  petFriendly: false,
+  familyOnly: false,
+  studentsAllowed: false,
+  shortTermAllowed: false,
+  longTermPreferred: false,
+  utilitiesIncluded: false,
+  availableNow: false,
+  depositRequired: false,
+  financingAvailable: false,
+  negotiable: false,
+  exchangeAccepted: false,
+  titleDeedAvailable: false,
+  byOwner: false,
+  byAgent: false,
+  landSizeMin: null,
+  landSizeMax: null,
+  yearBuiltMin: null,
+  yearBuiltMax: null,
   features: null,
 };
 
@@ -272,8 +291,12 @@ function matchesFilters(listing, query, filters) {
   if (filters.sizeMax != null && Number(listing.sizeSqm || 0) > Number(filters.sizeMax)) return false;
   if (filters.furnished && listing.furnished !== filters.furnished) return false;
   if (filters.condition && String(listing.condition || '').toLowerCase() !== String(filters.condition).toLowerCase()) return false;
+  if (filters.rentPeriod && listing.rentPeriod !== filters.rentPeriod) return false;
+  if (filters.financingAvailable && !listing.financingAvailable) return false;
+  if (filters.negotiable && !listing.negotiable) return false;
+  if (filters.exchangeAccepted && !listing.exchangeAccepted) return false;
   if (filters.features?.length) {
-    const searchableFeatures = filters.features.filter((feature) => FEATURES.includes(feature));
+    const searchableFeatures = filters.features.filter((feature) => FEATURES.includes(feature) || ['Pet friendly', 'Family only', 'Students allowed', 'Short-term allowed', 'Long-term preferred', 'Utilities included', 'Available now', 'Deposit required', 'Title deed available', 'By owner', 'By agent', 'New construction'].includes(feature));
     for (const feature of searchableFeatures) {
       if (!(listing.features || []).includes(feature)) return false;
     }
@@ -291,6 +314,12 @@ function countActiveFilters(filters) {
   if (filters.bedrooms != null) count += 1;
   if (filters.bathrooms != null) count += 1;
   if (filters.sizeMin != null || filters.sizeMax != null) count += 1;
+  if (filters.rentPeriod) count += 1;
+  if (filters.landSizeMin != null || filters.landSizeMax != null) count += 1;
+  if (filters.yearBuiltMin != null || filters.yearBuiltMax != null) count += 1;
+  ['petFriendly', 'familyOnly', 'studentsAllowed', 'shortTermAllowed', 'longTermPreferred', 'utilitiesIncluded', 'availableNow', 'depositRequired', 'financingAvailable', 'negotiable', 'exchangeAccepted', 'titleDeedAvailable', 'byOwner', 'byAgent'].forEach((key) => {
+    if (filters[key]) count += 1;
+  });
   if (filters.features?.length) count += 1;
   return count;
 }
@@ -706,6 +735,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
 
 function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const results = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
+  const activeFilters = countActiveFilters(filters);
   return (
     <div className="min-h-screen bg-black pb-28">
       <div className="sticky top-0 z-20 bg-black">
@@ -729,7 +759,7 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
               onClick={onOpenFilters}
               className="h-8 rounded-md border-2 border-emerald-500 px-4 text-xs font-bold tracking-wide text-emerald-300"
             >
-              Filters
+              Filters{activeFilters ? ` ${activeFilters}` : ''}
             </button>
             <button type="button" className="h-8 rounded-md bg-emerald-600 px-4 text-xs font-bold tracking-wide text-white">
               Save Search
@@ -762,6 +792,7 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
 
 function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage, resultsOpen, setResultsOpen }) {
   const filtered = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
+  const activeFilters = countActiveFilters(filters);
   const submit = () => {
     setQuery((value) => value.trim());
     setResultsOpen(true);
@@ -842,8 +873,9 @@ function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedI
 
         <div className="mb-3 flex items-center justify-between">
           <SectionTitle title={`${filtered.length} listings`} />
-          <button type="button" onClick={onOpenFilters} className="flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-700 text-white">
+          <button type="button" onClick={onOpenFilters} className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-700 text-white">
             <Filter className="h-4 w-4" />
+            {activeFilters ? <span className="absolute -right-1 -top-1 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white">{activeFilters}</span> : null}
           </button>
         </div>
         <div className="space-y-4">
@@ -1000,11 +1032,24 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
   const mode = filters.listingType === 'For Sale' ? 'For Sale' : 'For Rent';
   const update = (key, value) => setFilters((prev) => ({ ...prev, [key]: value }));
   const toggleProperty = (type) => update('propertyType', filters.propertyType === type ? null : type);
+  const toggleFlag = (key, feature) => {
+    setFilters((prev) => {
+      const active = !prev[key];
+      const current = prev.features || [];
+      const nextFeatures = feature
+        ? active
+          ? [...new Set([...current, feature])]
+          : current.filter((item) => item !== feature)
+        : current;
+      return { ...prev, [key]: active, features: nextFeatures.length ? nextFeatures : null };
+    });
+  };
   const toggleFeature = (feature) => {
     const current = filters.features || [];
     const next = current.includes(feature) ? current.filter((item) => item !== feature) : [...current, feature];
     update('features', next.length ? next : null);
   };
+  const activeCount = countActiveFilters(filters);
 
   return (
     <div className="fixed inset-0 z-30 bg-black">
@@ -1014,7 +1059,7 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
             <button type="button" onClick={onClose} className="h-9 rounded-full border border-white/10 px-5 text-sm tracking-wide text-emerald-300">
               Cancel
             </button>
-            <h2 className="text-lg font-bold">Filters</h2>
+            <h2 className="text-lg font-bold">Filters{activeCount ? ` ${activeCount}` : ''}</h2>
             <button type="button" onClick={() => setFilters({ ...INITIAL_FILTERS, listingType: mode })} className="h-9 rounded-full border border-white/10 px-5 text-sm tracking-wide text-emerald-300">
               Reset
             </button>
@@ -1035,9 +1080,9 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
 
         <div className="flex-1 overflow-y-auto pb-20">
           {mode === 'For Rent' ? (
-            <RentFilters filters={filters} update={update} toggleProperty={toggleProperty} toggleFeature={toggleFeature} />
+            <EnhancedRentFilters filters={filters} update={update} toggleProperty={toggleProperty} toggleFeature={toggleFeature} toggleFlag={toggleFlag} />
           ) : (
-            <SaleFilters filters={filters} update={update} toggleProperty={toggleProperty} toggleFeature={toggleFeature} />
+            <EnhancedSaleFilters filters={filters} update={update} toggleProperty={toggleProperty} toggleFeature={toggleFeature} toggleFlag={toggleFlag} />
           )}
         </div>
 
@@ -1046,7 +1091,7 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
             Save Search
           </button>
           <button type="button" onClick={onClose} className="h-11 rounded-lg bg-emerald-700 text-sm font-bold tracking-wide text-white">
-            See Homes
+            Show {totalResults} homes
           </button>
         </div>
       </div>
@@ -1075,15 +1120,36 @@ function FilterSectionTitle({ children }) {
   return <h3 className="border-t border-white/10 px-4 pb-2 pt-5 text-base font-bold tracking-wide text-stone-300">{children}</h3>;
 }
 
-function FilterRow({ label, value = 'Any', onClick }) {
+function FilterBlock({ title, children }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-13 w-full items-center justify-between border-t border-white/10 px-4 py-4 text-left">
-      <span className="text-base tracking-wide text-stone-100">{label}</span>
-      <span className="flex items-center gap-2 text-base tracking-wide text-stone-300">
-        {value}
-        <ChevronDown className="h-4 w-4" />
-      </span>
-    </button>
+    <div className="border-t border-white/10 px-4 py-5">
+      <div className="mb-3 text-base font-semibold tracking-wide text-stone-100">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, onChange, options, disabled = false }) {
+  return (
+    <label className="block">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <select value={value || ''} onChange={(event) => onChange(event.target.value || null)} disabled={disabled} className="h-11 w-full rounded-lg border border-white/10 bg-stone-950/50 px-3 text-sm text-white outline-none disabled:opacity-45">
+        {options.map((option) => (
+          <option key={option.value ?? option} value={option.value ?? option}>
+            {option.label ?? option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NumberFilter({ label, value, onChange, placeholder }) {
+  return (
+    <label className="block">
+      <div className="mb-1.5 text-xs uppercase tracking-wide text-stone-500">{label}</div>
+      <input value={value ?? ''} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)} type="number" min="0" placeholder={placeholder} className="h-11 w-full rounded-lg border border-white/10 bg-stone-950/50 px-3 text-sm text-white outline-none placeholder:text-stone-600" />
+    </label>
   );
 }
 
@@ -1202,6 +1268,135 @@ function SaleFilters({ filters, update, toggleProperty, toggleFeature }) {
       <FilterRow label="Year Built" />
       <FilterSectionTitle>Amenities</FilterSectionTitle>
       {['Air Conditioning', 'Garage', 'Pool', 'Waterfront'].map((feature) => (
+        <SwitchRow key={feature} label={feature} active={(filters.features || []).includes(feature)} onClick={() => toggleFeature(feature)} />
+      ))}
+    </>
+  );
+}
+
+function LocationFilters({ filters, update }) {
+  const country = filters.country || 'Ethiopia';
+  const regions = regionsOf(country);
+  const cities = filters.region ? citiesOf(country, filters.region) : [];
+  const areas = filters.city ? areasOf(country, filters.city) : [];
+
+  return (
+    <FilterBlock title="Location">
+      <div className="grid grid-cols-2 gap-3">
+        <FilterSelect label="Country" value={country} onChange={(value) => { update('country', value || 'Ethiopia'); update('region', null); update('city', null); update('area', null); }} options={COUNTRY_LIST.map((item) => ({ label: item, value: item }))} />
+        <FilterSelect label="Region" value={filters.region} onChange={(value) => { update('region', value); update('city', null); update('area', null); }} options={[{ label: 'Any region', value: '' }, ...regions.map((item) => ({ label: item, value: item }))]} />
+        <FilterSelect label="City" value={filters.city} onChange={(value) => { update('city', value); update('area', null); }} disabled={!filters.region} options={[{ label: 'Any city', value: '' }, ...cities.map((item) => ({ label: item, value: item }))]} />
+        <FilterSelect label="Area" value={filters.area} onChange={(value) => update('area', value)} disabled={!filters.city} options={[{ label: 'Any area', value: '' }, ...areas.map((item) => ({ label: item, value: item }))]} />
+      </div>
+    </FilterBlock>
+  );
+}
+
+function PriceFilters({ filters, update, title }) {
+  return (
+    <FilterBlock title={title}>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberFilter label="Min price" value={filters.minPrice} onChange={(value) => update('minPrice', value)} placeholder="0" />
+        <NumberFilter label="Max price" value={filters.maxPrice} onChange={(value) => update('maxPrice', value)} placeholder="Any" />
+      </div>
+    </FilterBlock>
+  );
+}
+
+function BedBathFilters({ filters, update }) {
+  return (
+    <>
+      <FilterBlock title="Bedrooms">
+        <SegmentGroup value={filters.bedrooms || 0} options={[{ label: 'Any', value: 0 }, { label: '1+', value: 1 }, { label: '2+', value: 2 }, { label: '3+', value: 3 }, { label: '4+', value: 4 }, { label: '5+', value: 5 }]} onChange={(value) => update('bedrooms', value || null)} />
+      </FilterBlock>
+      <FilterBlock title="Bathrooms">
+        <SegmentGroup value={filters.bathrooms || 0} options={[{ label: 'Any', value: 0 }, { label: '1+', value: 1 }, { label: '2+', value: 2 }, { label: '3+', value: 3 }, { label: '4+', value: 4 }, { label: '5+', value: 5 }]} onChange={(value) => update('bathrooms', value || null)} />
+      </FilterBlock>
+    </>
+  );
+}
+
+function SizeFilters({ filters, update, title = 'Size' }) {
+  return (
+    <FilterBlock title={title}>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberFilter label="Min sqm" value={filters.sizeMin} onChange={(value) => update('sizeMin', value)} placeholder="0" />
+        <NumberFilter label="Max sqm" value={filters.sizeMax} onChange={(value) => update('sizeMax', value)} placeholder="Any" />
+      </div>
+    </FilterBlock>
+  );
+}
+
+function EnhancedRentFilters({ filters, update, toggleProperty, toggleFeature, toggleFlag }) {
+  return (
+    <>
+      <LocationFilters filters={filters} update={update} />
+      <PriceFilters filters={filters} update={update} title="Monthly Rent" />
+      <BedBathFilters filters={filters} update={update} />
+      <FilterSectionTitle>Property Type</FilterSectionTitle>
+      {['Apartment', 'House', 'Villa', 'Studio', 'Commercial', 'Office'].map((type) => (
+        <SwitchRow key={type} label={type} active={filters.propertyType === type} onClick={() => toggleProperty(type)} />
+      ))}
+      <FilterBlock title="Rent Period">
+        <SegmentGroup value={filters.rentPeriod || ''} options={[{ label: 'Any', value: '' }, { label: 'Monthly', value: 'Monthly' }, { label: 'Quarterly', value: 'Quarterly' }, { label: 'Yearly', value: 'Yearly' }]} onChange={(value) => update('rentPeriod', value || null)} />
+      </FilterBlock>
+      <FilterBlock title="Furnishing">
+        <SegmentGroup value={filters.furnished || ''} options={[{ label: 'Any', value: '' }, { label: 'Furnished', value: 'Furnished' }, { label: 'Semi', value: 'Semi-Furnished' }, { label: 'Unfurnished', value: 'Unfurnished' }]} onChange={(value) => update('furnished', value || null)} />
+      </FilterBlock>
+      <FilterSectionTitle>Rental Details</FilterSectionTitle>
+      <SwitchRow label="Available now" active={filters.availableNow} onClick={() => toggleFlag('availableNow', 'Available now')} />
+      <SwitchRow label="Utilities included" active={filters.utilitiesIncluded} onClick={() => toggleFlag('utilitiesIncluded', 'Utilities included')} />
+      <SwitchRow label="Deposit required" active={filters.depositRequired} onClick={() => toggleFlag('depositRequired', 'Deposit required')} />
+      <SwitchRow label="Pet friendly" active={filters.petFriendly} onClick={() => toggleFlag('petFriendly', 'Pet friendly')} />
+      <SwitchRow label="Family only" active={filters.familyOnly} onClick={() => toggleFlag('familyOnly', 'Family only')} />
+      <SwitchRow label="Students allowed" active={filters.studentsAllowed} onClick={() => toggleFlag('studentsAllowed', 'Students allowed')} />
+      <SwitchRow label="Short-term allowed" active={filters.shortTermAllowed} onClick={() => toggleFlag('shortTermAllowed', 'Short-term allowed')} />
+      <SwitchRow label="Long-term preferred" active={filters.longTermPreferred} onClick={() => toggleFlag('longTermPreferred', 'Long-term preferred')} />
+      <FilterSectionTitle>Amenities</FilterSectionTitle>
+      {['Parking', 'Security', 'Water Tank', 'Backup Generator', 'Balcony', 'Elevator', 'CCTV', 'Garden', 'Gym', 'Pool'].map((feature) => (
+        <SwitchRow key={feature} label={feature} active={(filters.features || []).includes(feature)} onClick={() => toggleFeature(feature)} />
+      ))}
+      <SizeFilters filters={filters} update={update} title="Size" />
+    </>
+  );
+}
+
+function EnhancedSaleFilters({ filters, update, toggleProperty, toggleFeature, toggleFlag }) {
+  return (
+    <>
+      <LocationFilters filters={filters} update={update} />
+      <PriceFilters filters={filters} update={update} title="Sale Price" />
+      <BedBathFilters filters={filters} update={update} />
+      <FilterSectionTitle>Property Type</FilterSectionTitle>
+      {['Apartment', 'House', 'Villa', 'Townhouse', 'Land', 'Commercial', 'Office'].map((type) => (
+        <SwitchRow key={type} label={type} active={filters.propertyType === type} onClick={() => toggleProperty(type)} />
+      ))}
+      <SizeFilters filters={filters} update={update} title="Building Size" />
+      <FilterBlock title="Land Size">
+        <div className="grid grid-cols-2 gap-3">
+          <NumberFilter label="Min sqm" value={filters.landSizeMin} onChange={(value) => update('landSizeMin', value)} placeholder="0" />
+          <NumberFilter label="Max sqm" value={filters.landSizeMax} onChange={(value) => update('landSizeMax', value)} placeholder="Any" />
+        </div>
+      </FilterBlock>
+      <FilterBlock title="Year Built">
+        <div className="grid grid-cols-2 gap-3">
+          <NumberFilter label="From" value={filters.yearBuiltMin} onChange={(value) => update('yearBuiltMin', value)} placeholder="Any" />
+          <NumberFilter label="To" value={filters.yearBuiltMax} onChange={(value) => update('yearBuiltMax', value)} placeholder="Any" />
+        </div>
+      </FilterBlock>
+      <FilterBlock title="Condition">
+        <SegmentGroup value={filters.condition || ''} options={[{ label: 'Any', value: '' }, { label: 'New', value: 'new' }, { label: 'Used', value: 'used' }, { label: 'Renovated', value: 'renovated' }]} onChange={(value) => update('condition', value || null)} />
+      </FilterBlock>
+      <FilterSectionTitle>Buying Options</FilterSectionTitle>
+      <SwitchRow label="Negotiable" active={filters.negotiable} onClick={() => toggleFlag('negotiable')} />
+      <SwitchRow label="Financing available" active={filters.financingAvailable} onClick={() => toggleFlag('financingAvailable')} />
+      <SwitchRow label="Exchange accepted" active={filters.exchangeAccepted} onClick={() => toggleFlag('exchangeAccepted')} />
+      <SwitchRow label="Title deed available" active={filters.titleDeedAvailable} onClick={() => toggleFlag('titleDeedAvailable', 'Title deed available')} />
+      <SwitchRow label="By owner" active={filters.byOwner} onClick={() => toggleFlag('byOwner', 'By owner')} />
+      <SwitchRow label="By agent" active={filters.byAgent} onClick={() => toggleFlag('byAgent', 'By agent')} />
+      <SwitchRow label="New construction" active={(filters.features || []).includes('New construction')} onClick={() => toggleFeature('New construction')} />
+      <FilterSectionTitle>Amenities</FilterSectionTitle>
+      {['Parking', 'Garden', 'Security', 'Balcony', 'Water Tank', 'Backup Generator', 'CCTV', 'Pool'].map((feature) => (
         <SwitchRow key={feature} label={feature} active={(filters.features || []).includes(feature)} onClick={() => toggleFeature(feature)} />
       ))}
     </>
