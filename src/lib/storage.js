@@ -148,6 +148,29 @@ export async function getCurrentProfile(userId) {
   return data;
 }
 
+export async function ensureCurrentProfile(profileData = {}) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('You must be signed in to continue.');
+
+  const existing = await getCurrentProfile(user.id);
+  if (existing) return existing;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert({
+      id: user.id,
+      email: user.email,
+      name: profileData.name?.trim() || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      phone: profileData.phone || null,
+      role: 'buyer',
+      account_type: profileData.accountType || 'standard',
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 /* ---------- MAPPERS ---------- */
 
 function rowToListing(r) {

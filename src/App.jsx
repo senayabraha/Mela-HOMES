@@ -30,6 +30,7 @@ import { supabase } from './lib/supabase';
 import {
   createListing,
   deleteListing,
+  ensureCurrentProfile,
   getCurrentProfile,
   getCurrentUserId,
   loadListings,
@@ -1202,6 +1203,11 @@ function SellScreen({ currentUserId, currentProfile, onCreated, onNeedAuth, edit
   }, [editingListing]);
 
   const canSubmit = currentUserId && form.propertyType && form.listingType && form.price && form.city;
+  const publishHint = !currentUserId
+    ? 'Sign in before publishing a listing.'
+    : !canSubmit
+      ? 'Add property type, listing type, price, and city to publish.'
+      : '';
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleFiles = async (event) => {
@@ -1233,6 +1239,7 @@ function SellScreen({ currentUserId, currentProfile, onCreated, onNeedAuth, edit
     }
     setSubmitting(true);
     try {
+      await ensureCurrentProfile(currentProfile || {});
       if (editingListing) {
         await updateListing(editingListing.id, { ...form });
         await onSaved();
@@ -1241,6 +1248,8 @@ function SellScreen({ currentUserId, currentProfile, onCreated, onNeedAuth, edit
         setForm(INITIAL_FORM);
         await onCreated();
       }
+    } catch (error) {
+      onToast(error.message || 'Could not publish listing', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -1334,6 +1343,7 @@ function SellScreen({ currentUserId, currentProfile, onCreated, onNeedAuth, edit
         <button type="submit" disabled={!canSubmit || submitting} className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 disabled:opacity-50">
           {submitting ? 'Saving...' : editingListing ? 'Update listing' : 'Publish listing'}
         </button>
+        {publishHint ? <p className="text-center text-xs text-stone-400">{publishHint}</p> : null}
         {editingListing ? <button type="button" onClick={onCancelEdit} className="w-full text-sm text-stone-400">Cancel editing</button> : null}
       </form>
     </div>
