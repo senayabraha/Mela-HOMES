@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bath,
   BedDouble,
@@ -16,6 +16,7 @@ import {
   MapPin,
   MessageCircle,
   Navigation,
+  Palette,
   Pencil,
   PlusSquare,
   Ruler,
@@ -45,11 +46,14 @@ import {
   getCurrentUser,
   getCurrentProfile,
   getCurrentUserId,
+  loadThreadReadMap,
   loadUnreadMessageCount,
   loadThreadMessages,
   loadListings,
+  loadMyListings,
   loadSavedIds,
   loadThreads,
+  markThreadRead,
   resetPassword,
   sendThreadMessage,
   setCachedUser,
@@ -65,6 +69,13 @@ import {
 
 const PROPERTY_TYPES = ['Apartment', 'House', 'Villa', 'Townhouse', 'Studio', 'Land', 'Commercial', 'Office'];
 const LISTING_TYPES = ['For Sale', 'For Rent'];
+const ACCOUNT_ROLES = ['buyer', 'owner', 'agent', 'broker', 'developer'];
+const LISTING_STATUS_OPTIONS = [
+  { label: 'Active', value: 'active' },
+  { label: 'Paused', value: 'paused' },
+  { label: 'Sold', value: 'sold' },
+  { label: 'Rented', value: 'rented' },
+];
 const FURNISHED_OPTIONS = ['Furnished', 'Semi-Furnished', 'Unfurnished'];
 const CONDITIONS = ['new', 'used', 'renovated'];
 const FEATURES = ['Parking', 'Garden', 'Security', 'Balcony', 'Elevator', 'Backup Generator', 'Water Tank', 'CCTV', 'Gym', 'Pool'];
@@ -405,9 +416,9 @@ function RangeSlider({ min, max, step = 1, valueMin, valueMax, onChange, format 
   );
 }
 
-function Shell({ children }) {
+function Shell({ children, themeMode = 'dark' }) {
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-50">
+    <div className={`${themeMode === 'dark' ? 'dark theme-dark' : 'theme-light'} min-h-screen bg-stone-950 text-stone-50`}>
       <div className="mx-auto min-h-screen max-w-md bg-[radial-gradient(circle_at_top,#1f3a2e,transparent_35%),linear-gradient(180deg,#111827_0%,#09090b_48%,#111827_100%)]">
         {children}
       </div>
@@ -1886,14 +1897,80 @@ function AgentsScreen({ listings, onOpenListing }) {
   );
 }
 
-function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpenAuth, onOpenListing, onToast }) {
+function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSelectThread, onThreadRead, onOpenAuth, onOpenListing, onBrowseHomes, onToast }) {
   const [threads, setThreads] = useState([]);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  const activeThread = threads.find((thread) => thread.id === selectedThreadId) || threads[0] || null;
+  const threadLabel = (thread) => {
+    const other = thread.buyer_id === currentUserId ? thread.seller : thread.buyer;
+    return other?.business_name || other?.name || other?.email || 'Conversation';
+  };
+
+  const threadRole = (thread) => (thread.buyer_id === currentUserId ? 'buying' : 'selling');
+  const listingLabel = (listing) => listing?.title || listing?.property_type || 'Property listing';
+
+  const formatTime = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (sameDay) return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const dateLabel = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (date.toDateString() === now.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  const filteredThreads = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return threads.filter((thread) => {
+      if (filter === 'buying' && threadRole(thread) !== 'buying') return false;
+      if (filter === 'selling' && threadRole(thread) !== 'selling') return false;
+      if (filter === 'unread' && !thread.unreadCount) return false;
+      if (!q) return true;
+      const haystack = [
+        threadLabel(thread),
+        listingLabel(thread.listing),
+        thread.listing?.city,
+        thread.listing?.area,
+        thread.listing?.location,
+        thread.lastMessage?.body,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [threads, filter, query, currentUserId]);
+
+  const activeThread = filteredThreads.find((thread) => thread.id === selectedThreadId) || filteredThreads[0] || null;
+
+  const appendMessage = (message) => {
+    setMessages((prev) => {
+      if (prev.some((item) => item.id === message.id)) return prev;
+      return [...prev, message].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    });
+  };
+
+  const refreshThreads = async () => {
+    const data = await loadThreads(readAtByThread);
+    setThreads(data);
+    if (!selectedThreadId && data[0]) onSelectThread(data[0].id);
+  };
 
   useEffect(() => {
     if (!currentUserId) {
@@ -1905,7 +1982,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpe
     const run = async () => {
       setLoading(true);
       try {
-        const data = await loadThreads();
+        const data = await loadThreads(readAtByThread);
         if (!active) return;
         setThreads(data);
         if (!selectedThreadId && data[0]) onSelectThread(data[0].id);
@@ -1919,7 +1996,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpe
     return () => {
       active = false;
     };
-  }, [currentUserId, selectedThreadId]);
+  }, [currentUserId, readAtByThread]);
 
   useEffect(() => {
     if (!activeThread?.id) {
@@ -1941,24 +2018,69 @@ function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpe
     };
   }, [activeThread?.id]);
 
+  useEffect(() => {
+    if (!activeThread?.id || !currentUserId) return;
+    onThreadRead(activeThread.id);
+    markThreadRead(activeThread.id).catch((error) => console.info('markThreadRead:', error.message));
+  }, [activeThread?.id, currentUserId]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages.length, activeThread?.id]);
+
+  useEffect(() => {
+    if (!currentUserId) return undefined;
+    const channel = supabase
+      .channel(`messages-inbox-${currentUserId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+        const message = payload.new;
+        setThreads((prev) => prev.map((thread) => (thread.id === message.thread_id ? { ...thread, lastMessage: message, unreadCount: message.sender_id === currentUserId || thread.id === activeThread?.id ? 0 : (thread.unreadCount || 0) + 1 } : thread)));
+        if (message.thread_id === activeThread?.id) {
+          appendMessage(message);
+          onThreadRead(message.thread_id);
+          markThreadRead(message.thread_id).catch(() => {});
+        } else {
+          try {
+            await refreshThreads();
+          } catch (error) {
+            console.info('refreshThreads:', error.message);
+          }
+        }
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, activeThread?.id, readAtByThread]);
+
   const send = async (event) => {
     event.preventDefault();
-    if (!activeThread) return;
+    const text = draft.trim();
+    if (!activeThread || !text) return;
+    const tempId = `temp-${Date.now()}`;
+    const optimistic = {
+      id: tempId,
+      thread_id: activeThread.id,
+      sender_id: currentUserId,
+      body: text,
+      created_at: new Date().toISOString(),
+      sending: true,
+    };
     setSending(true);
+    setDraft('');
+    appendMessage(optimistic);
+    setThreads((prev) => prev.map((thread) => (thread.id === activeThread.id ? { ...thread, lastMessage: optimistic } : thread)));
     try {
-      const message = await sendThreadMessage(activeThread.id, draft);
-      setMessages((prev) => [...prev, message]);
-      setDraft('');
+      const message = await sendThreadMessage(activeThread.id, text);
+      setMessages((prev) => prev.map((item) => (item.id === tempId ? message : item)).filter((item, index, arr) => arr.findIndex((candidate) => candidate.id === item.id) === index));
+      setThreads((prev) => prev.map((thread) => (thread.id === activeThread.id ? { ...thread, lastMessage: message } : thread)));
     } catch (error) {
+      setMessages((prev) => prev.map((item) => (item.id === tempId ? { ...item, sending: false, failed: true } : item)));
+      setDraft(text);
       onToast(error.message || 'Could not send message', 'error');
     } finally {
       setSending(false);
     }
-  };
-
-  const threadLabel = (thread) => {
-    const other = thread.buyer_id === currentUserId ? thread.seller : thread.buyer;
-    return other?.business_name || other?.name || other?.email || 'Conversation';
   };
 
   return (
@@ -1976,46 +2098,105 @@ function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpe
           <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-8 text-center text-sm text-stone-400">Loading messages...</div>
         ) : threads.length ? (
           <>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {threads.map((thread) => (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-3">
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-stone-950/40 px-3">
+                <Search className="h-4 w-4 text-stone-500" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search conversations"
+                  className="min-w-0 flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-stone-500"
+                />
+                {query ? <button type="button" onClick={() => setQuery('')} className="rounded-full p-1 text-stone-500"><X className="h-4 w-4" /></button> : null}
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {[
+                  ['all', 'All'],
+                  ['buying', 'Buying'],
+                  ['selling', 'Selling'],
+                  ['unread', 'Unread'],
+                ].map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-2xl border px-2 py-2 text-xs ${filter === value ? 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {filteredThreads.length ? (
+              <div className="space-y-2">
+                {filteredThreads.map((thread) => {
+                  const unread = thread.unreadCount || 0;
+                  const listing = thread.listing || {};
+                  const lastMessage = thread.lastMessage;
+                  return (
                 <button
                   key={thread.id}
                   type="button"
                   onClick={() => onSelectThread(thread.id)}
-                  className={`shrink-0 rounded-full border px-3 py-2 text-sm ${activeThread?.id === thread.id ? 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/10 bg-white/5 text-stone-300'}`}
+                      className={`flex w-full items-center gap-3 rounded-3xl border p-3 text-left ${activeThread?.id === thread.id ? 'border-emerald-400 bg-emerald-400/15' : unread ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-white/5'}`}
                 >
-                  {threadLabel(thread)}
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-900">
+                        {listing.photos?.[0] ? <img src={listing.photos[0]} alt="" className="h-full w-full object-cover" /> : <Building2 className="m-4 h-6 w-6 text-stone-600" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="truncate text-sm font-semibold text-white">{listingLabel(listing)}</div>
+                          {unread ? <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" /> : null}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-stone-400">{threadLabel(thread)} - {threadRole(thread) === 'buying' ? 'Buying' : 'Selling'}</div>
+                        <div className={`mt-1 truncate text-xs ${unread ? 'font-semibold text-emerald-200' : 'text-stone-500'}`}>{lastMessage?.body || 'No messages yet'}</div>
+                        <div className="mt-1 truncate text-[11px] text-stone-500">{listing.city || listing.area || listing.location || 'Location not set'} - {listing.status || 'active'}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-2">
+                        <span className="text-[11px] text-stone-500">{formatTime(lastMessage?.created_at || thread.created_at)}</span>
+                        {unread ? <span className="rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white">{unread > 9 ? '9+' : unread}</span> : <ChevronRight className="h-4 w-4 text-stone-500" />}
+                      </div>
                 </button>
-              ))}
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-white/10 bg-white/5 px-5 py-8 text-center text-sm text-stone-400">No conversations match your filters.</div>
+            )}
 
             {activeThread ? (
               <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                 <button type="button" onClick={() => activeThread.listing ? onOpenListing(rowToThreadListing(activeThread.listing)) : null} className="flex w-full items-center gap-3 border-b border-white/10 p-4 text-left">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-900">
-                    {activeThread.listing?.photos?.[0] ? <img src={activeThread.listing.photos[0]} alt="" className="h-full w-full object-cover" /> : null}
+                    {activeThread.listing?.photos?.[0] ? <img src={activeThread.listing.photos[0]} alt="" className="h-full w-full object-cover" /> : <Building2 className="m-4 h-6 w-6 text-stone-600" />}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold text-white">{activeThread.listing?.title || activeThread.listing?.property_type || 'Property listing'}</div>
-                    <div className="mt-1 truncate text-xs text-stone-400">{threadLabel(activeThread)}</div>
+                    <div className="mt-1 truncate text-xs text-stone-400">{formatPrice(activeThread.listing?.price, activeThread.listing?.currency)} - {activeThread.listing?.listing_type || 'Listing'}</div>
+                    <div className="mt-0.5 truncate text-xs text-stone-500">{activeThread.listing?.city || activeThread.listing?.area || activeThread.listing?.location || 'Location not set'} - {threadLabel(activeThread)}</div>
                   </div>
+                  <span className="rounded-full border border-white/10 bg-stone-950/40 px-2 py-1 text-[10px] uppercase tracking-wide text-stone-400">{activeThread.listing?.status || 'active'}</span>
                 </button>
 
-                <div className="max-h-[48vh] space-y-3 overflow-y-auto p-4">
+                <div className="max-h-[52vh] space-y-3 overflow-y-auto p-4">
                   {messages.length ? (
-                    messages.map((message) => {
+                    messages.map((message, index) => {
                       const mine = message.sender_id === currentUserId;
+                      const prev = messages[index - 1];
+                      const showDate = !prev || dateLabel(prev.created_at) !== dateLabel(message.created_at);
                       return (
-                        <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${mine ? 'bg-emerald-500 text-stone-950' : 'bg-stone-950/70 text-stone-100'}`}>
-                            {message.body}
+                        <React.Fragment key={message.id}>
+                          {showDate ? <div className="py-1 text-center text-[11px] uppercase tracking-wide text-stone-500">{dateLabel(message.created_at)}</div> : null}
+                          <div className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${mine ? 'bg-emerald-500 text-stone-950' : 'bg-stone-950/70 text-stone-100'}`}>
+                              {!mine ? <div className="mb-1 text-[11px] font-semibold text-stone-400">{threadLabel(activeThread)}</div> : null}
+                              <div>{message.body}</div>
+                              <div className={`mt-1 text-[10px] ${mine ? 'text-stone-800/70' : 'text-stone-500'}`}>{message.failed ? 'Failed - tap send again' : message.sending ? 'Sending...' : formatTime(message.created_at)}</div>
+                            </div>
                           </div>
-                        </div>
+                        </React.Fragment>
                       );
                     })
                   ) : (
                     <div className="py-8 text-center text-sm text-stone-400">Write the first message.</div>
                   )}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 <form onSubmit={send} className="flex gap-2 border-t border-white/10 p-3">
@@ -2033,7 +2214,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, onSelectThread, onOpe
             ) : null}
           </>
         ) : (
-          <EmptyState title="No messages yet" text="Open a listing and tap Send Message to start a conversation." />
+          <EmptyState title="No messages yet" text="Open a listing and tap Send Message to start a conversation." action="Browse homes" onAction={onBrowseHomes} />
         )}
       </div>
     </div>
@@ -2055,6 +2236,7 @@ function rowToThreadListing(row) {
     city: row.city,
     area: row.area,
     sellerId: row.seller_id,
+    status: row.status,
   };
 }
 
@@ -2369,24 +2551,91 @@ function AdminScreen({ onBack, onToast, onListingsChanged }) {
   );
 }
 
-function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin }) {
+function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, savedCount, unreadMessages, themeMode, onThemeChange, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin, onNavigate, onUpdateListingStatus }) {
   const [name, setName] = useState(currentProfile?.name || '');
   const [phone, setPhone] = useState(currentProfile?.phone || '');
+  const [businessName, setBusinessName] = useState(currentProfile?.business_name || '');
+  const [role, setRole] = useState(currentProfile?.role || 'buyer');
+  const [telegram, setTelegram] = useState(currentProfile?.telegram || '');
+  const [openSection, setOpenSection] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [statusSavingId, setStatusSavingId] = useState(null);
 
   useEffect(() => {
     setName(currentProfile?.name || '');
     setPhone(currentProfile?.phone || '');
+    setBusinessName(currentProfile?.business_name || '');
+    setRole(currentProfile?.role || 'buyer');
+    setTelegram(currentProfile?.telegram || '');
   }, [currentProfile]);
 
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await updateProfile({ name, phone });
+      await updateProfile({
+        name: name.trim(),
+        phone: phone.trim() || null,
+        businessName: businessName.trim() || null,
+        role,
+        telegram: telegram.trim() || null,
+      });
       await onProfileSaved();
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateStatus = async (listing, status) => {
+    if ((listing.status || 'active') === status) return;
+    setStatusSavingId(listing.id);
+    try {
+      await onUpdateListingStatus(listing.id, status);
+    } finally {
+      setStatusSavingId(null);
+    }
+  };
+
+  const activeListings = myListings.filter((listing) => (listing.status || 'active') === 'active').length;
+  const statItems = [
+    ['My Listings', myListings.length],
+    ['Active', activeListings],
+    ['Saved', savedCount],
+    ['Unread', unreadMessages],
+  ];
+
+  const toggleSection = (section) => setOpenSection((current) => (current === section ? null : section));
+
+  const SectionButton = ({ section, icon: Icon, label, detail, onClick }) => {
+    const expanded = openSection === section;
+    return (
+      <button
+        type="button"
+        onClick={onClick || (() => toggleSection(section))}
+        className="flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left active:bg-white/10"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-stone-950/50 text-emerald-300">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-white">{label}</div>
+          {detail ? <div className="mt-0.5 truncate text-xs text-stone-400">{detail}</div> : null}
+        </div>
+        {onClick ? <ChevronRight className="h-5 w-5 text-stone-500" /> : expanded ? <ChevronUp className="h-5 w-5 text-stone-500" /> : <ChevronDown className="h-5 w-5 text-stone-500" />}
+      </button>
+    );
+  };
+
+  const ThemeButton = ({ value, label }) => {
+    const active = themeMode === value;
+    return (
+      <button
+        type="button"
+        onClick={() => onThemeChange(value)}
+        className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}
+      >
+        {label}
+      </button>
+    );
   };
 
   return (
@@ -2397,42 +2646,95 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
           <EmptyState title="Your account is not connected" text="Sign in to save homes and manage listings." action="Sign in" onAction={onOpenAuth} />
         ) : (
           <>
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <SectionTitle title="Profile" />
-              <div className="grid grid-cols-1 gap-3">
-                <InputField label="Name" value={name} onChange={setName} />
-                <InputField label="Phone" value={phone} onChange={setPhone} />
-                <div className="rounded-2xl bg-stone-950/40 px-4 py-3 text-sm text-stone-400">{currentProfile?.email || currentUserEmail || 'Signed in'}</div>
-                {isAdminProfile(currentProfile, currentUserEmail) ? (
-                  <button type="button" onClick={onOpenAdmin} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-3 text-sm font-semibold text-emerald-200">
-                    <Shield className="h-4 w-4" />
-                    Admin Dashboard
-                  </button>
-                ) : null}
-                <button type="button" onClick={saveProfile} disabled={saving} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
-                  {saving ? 'Saving...' : 'Save profile'}
-                </button>
-              </div>
+            <div className="grid grid-cols-4 gap-2">
+              {statItems.map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-center">
+                  <div className="text-lg font-semibold text-white">{value}</div>
+                  <div className="mt-1 text-[11px] text-stone-400">{label}</div>
+                </div>
+              ))}
             </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <SectionTitle title="My Listings" />
-              <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => onNavigate('sell')} className="rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-semibold text-stone-950">
+                Post listing
+              </button>
+              <button type="button" onClick={() => onNavigate('saved')} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200">
+                Saved homes
+              </button>
+              <button type="button" onClick={() => onNavigate('messages')} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200">
+                Messages
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <SectionButton section="profile" icon={UserRound} label="Profile" detail={currentProfile?.email || currentUserEmail || 'Edit account details'} />
+              {openSection === 'profile' ? (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    <InputField label="Name" value={name} onChange={setName} />
+                    <InputField label="Phone" value={phone} onChange={setPhone} />
+                    <InputField label="Business name" value={businessName} onChange={setBusinessName} placeholder="Agency, company, or trade name" />
+                    <SelectField label="Role" value={role} onChange={setRole} options={ACCOUNT_ROLES} />
+                    <InputField label="Telegram / WhatsApp" value={telegram} onChange={setTelegram} placeholder="@username or phone number" />
+                    <div className="rounded-2xl bg-stone-950/40 px-4 py-3 text-sm text-stone-400">{currentProfile?.email || currentUserEmail || 'Signed in'}</div>
+                    <button type="button" onClick={saveProfile} disabled={saving} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
+                      {saving ? 'Saving...' : 'Save profile'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {isAdminProfile(currentProfile, currentUserEmail) ? (
+                <SectionButton section="admin" icon={Shield} label="Admin Dashboard" detail="Manage users, listings, and reports" onClick={onOpenAdmin} />
+              ) : null}
+
+              <SectionButton section="appearance" icon={Palette} label="Appearance" detail={`Current: ${themeMode}`} />
+              {openSection === 'appearance' ? (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Appearance</div>
+                      <p className="mt-1 text-xs text-stone-500">Keep the premium dark look or preview a cleaner light marketplace style.</p>
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-stone-950/40 px-2 py-1 text-[10px] uppercase tracking-wide text-stone-400">
+                      {themeMode}
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <ThemeButton value="dark" label="Dark" />
+                    <ThemeButton value="light" label="Light" />
+                  </div>
+                </div>
+              ) : null}
+
+              <SectionButton section="listings" icon={Store} label="My Listings" detail={`${myListings.length} total, ${activeListings} active`} />
+              {openSection === 'listings' ? (
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <div className="space-y-3">
                 {myListings.length ? (
                   myListings.map((listing) => (
                     <div key={listing.id} className="rounded-2xl bg-stone-950/40 p-3">
                       <button type="button" onClick={() => onOpenListing(listing)} className="flex w-full items-center justify-between gap-3 text-left">
                         <div>
                           <div className="font-medium">{listingTitle(listing)}</div>
-                          <div className="mt-1 text-sm text-stone-400">{formatPrice(listing.price, listing.currency)} · {listing.listingType}</div>
+                          <div className="mt-1 text-xs text-stone-500">{listing.city || listing.location || 'Location not set'} - {(listing.photos || []).length} photo{(listing.photos || []).length === 1 ? '' : 's'}</div>
+                          <div className="mt-1 text-sm text-stone-400">{formatPrice(listing.price, listing.currency)} - {listing.listingType}</div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-stone-500" />
                       </button>
+                      <div className="mt-3">
+                        <div className="mb-2 flex items-center justify-between text-xs text-stone-500">
+                          <span>Status</span>
+                          {statusSavingId === listing.id ? <span>Saving...</span> : <span className="capitalize">{listing.status || 'active'}</span>}
+                        </div>
+                        <SegmentGroup value={listing.status || 'active'} options={LISTING_STATUS_OPTIONS} onChange={(status) => updateStatus(listing, status)} />
+                      </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <button type="button" onClick={() => onStartEdit(listing)} className="rounded-2xl bg-white/8 px-3 py-2 text-sm">
                           Edit
                         </button>
-                        <button type="button" onClick={() => onDeleteListing(listing.id)} className="rounded-2xl bg-emerald-500/15 px-3 py-2 text-sm text-emerald-200">
+                        <button type="button" onClick={() => onDeleteListing(listing)} className="rounded-2xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
                           Delete
                         </button>
                       </div>
@@ -2441,7 +2743,9 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                 ) : (
                   <p className="text-sm text-stone-400">No listings posted yet.</p>
                 )}
-              </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <button type="button" onClick={onSignOut} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
@@ -2566,8 +2870,13 @@ function toForm(listing) {
 
 export default function App() {
   const { toast, show, clear } = useToast();
+  const [themeMode, setThemeMode] = useState(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return window.localStorage.getItem('themeMode') || 'dark';
+  });
   const [tab, setTab] = useState('discover');
   const [listings, setListings] = useState([]);
+  const [myListingRows, setMyListingRows] = useState([]);
   const [query, setQuery] = useState('');
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [currentUserId, setCurrentUserId] = useState(null);
@@ -2582,13 +2891,24 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState(null);
-  const [readAtByThread, setReadAtByThread] = useState({});
+  const [readAtByThread, setReadAtByThread] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem('melaHomesThreadReads') || '{}');
+    } catch {
+      return {};
+    }
+  });
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [pendingDeleteListing, setPendingDeleteListing] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const refreshListings = async () => {
-    const data = await loadListings();
+    const [data, mine] = await Promise.all([
+      loadListings(),
+      currentUserId ? loadMyListings(currentUserId) : Promise.resolve([]),
+    ]);
     setListings(data);
+    setMyListingRows(mine);
     if (selectedListing) {
       const fresh = data.find((item) => item.id === selectedListing.id);
       setSelectedListing(fresh || null);
@@ -2600,6 +2920,7 @@ export default function App() {
       setCurrentProfile(null);
       setCurrentUserEmail('');
       setSavedIds([]);
+      setMyListingRows([]);
       return;
     }
     let profile = await getCurrentProfile(userId);
@@ -2610,10 +2931,21 @@ export default function App() {
         console.error('ensureCurrentProfile:', error);
       }
     }
-    const saved = await loadSavedIds(userId);
+    const [saved, mine] = await Promise.all([
+      loadSavedIds(userId),
+      loadMyListings(userId),
+    ]);
     setCurrentProfile(profile);
     setSavedIds(saved);
+    setMyListingRows(mine);
   };
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', themeMode === 'dark');
+    document.documentElement.classList.toggle('theme-dark', themeMode === 'dark');
+    document.documentElement.classList.toggle('theme-light', themeMode === 'light');
+    window.localStorage.setItem('themeMode', themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     let active = true;
@@ -2687,11 +3019,39 @@ export default function App() {
   }, [currentUserId, readAtByThread]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem('melaHomesThreadReads', JSON.stringify(readAtByThread));
+    } catch {
+      // localStorage can be unavailable in private browsing modes.
+    }
+  }, [readAtByThread]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    let active = true;
+    loadThreadReadMap()
+      .then((readMap) => {
+        if (active && Object.keys(readMap).length) {
+          setReadAtByThread((prev) => ({ ...readMap, ...prev }));
+        }
+      })
+      .catch((error) => console.info('loadThreadReadMap:', error.message));
+    return () => {
+      active = false;
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
     if (tab !== 'messages' || !selectedThreadId) return;
     setReadAtByThread((prev) => ({ ...prev, [selectedThreadId]: Date.now() }));
   }, [tab, selectedThreadId]);
 
-  const myListings = useMemo(() => listings.filter((listing) => currentUserId && listing.sellerId === currentUserId), [currentUserId, listings]);
+  const markThreadLocallyRead = (threadId) => {
+    if (!threadId) return;
+    setReadAtByThread((prev) => ({ ...prev, [threadId]: Date.now() }));
+  };
+
+  const myListings = useMemo(() => myListingRows.filter((listing) => currentUserId && listing.sellerId === currentUserId), [currentUserId, myListingRows]);
   const isAdmin = isAdminProfile(currentProfile, currentUserEmail);
 
   const handleToggleSave = async (listingId) => {
@@ -2709,16 +3069,33 @@ export default function App() {
     }
   };
 
-  const handleDeleteListing = async (listingId) => {
-    const confirmed = window.confirm('Delete this listing?');
-    if (!confirmed) return;
+  const requestDeleteListing = (listing) => {
+    if (!listing) return;
+    setPendingDeleteListing(typeof listing === 'object' ? listing : { id: listing });
+  };
+
+  const handleDeleteListing = async () => {
+    const listingId = pendingDeleteListing?.id;
+    if (!listingId) return;
     try {
       await deleteListing(listingId);
       await refreshListings();
       setSelectedListing(null);
+      setPendingDeleteListing(null);
       show('Listing deleted', 'success');
     } catch (error) {
       show(error.message || 'Could not delete listing', 'error');
+    }
+  };
+
+  const handleUpdateListingStatus = async (listingId, status) => {
+    try {
+      await updateListing(listingId, { status });
+      await refreshListings();
+      show(`Listing marked ${status}`, 'success');
+    } catch (error) {
+      show(error.message || 'Could not update listing status', 'error');
+      throw error;
     }
   };
 
@@ -2768,7 +3145,7 @@ export default function App() {
             setSelectedListing(null);
             setTab('sell');
           }}
-          onDelete={() => handleDeleteListing(selectedListing.id)}
+          onDelete={() => requestDeleteListing(selectedListing)}
         />
       );
     }
@@ -2809,9 +3186,15 @@ export default function App() {
         <MessagesScreen
           currentUserId={currentUserId}
           selectedThreadId={selectedThreadId}
+          readAtByThread={readAtByThread}
           onSelectThread={setSelectedThreadId}
+          onThreadRead={markThreadLocallyRead}
           onOpenAuth={() => openAuth('signin')}
           onOpenListing={setSelectedListing}
+          onBrowseHomes={() => {
+            setResultsOpen(false);
+            setTab('discover');
+          }}
           onToast={show}
         />
       );
@@ -2847,8 +3230,12 @@ export default function App() {
           currentUserId={currentUserId}
           currentUserEmail={currentUserEmail}
         myListings={myListings}
+        savedCount={savedIds.length}
+        unreadMessages={unreadMessages}
+        themeMode={themeMode}
+        onThemeChange={setThemeMode}
         onOpenListing={setSelectedListing}
-        onDeleteListing={handleDeleteListing}
+        onDeleteListing={requestDeleteListing}
         onStartEdit={(listing) => {
           setEditingListing(listing);
           setTab('sell');
@@ -2859,12 +3246,20 @@ export default function App() {
           show('Profile saved', 'success');
         }}
         onOpenAdmin={() => setAdminOpen(true)}
+        onNavigate={(nextTab) => {
+          setAdminOpen(false);
+          setEditingListing(null);
+          setResultsOpen(false);
+          setTab(nextTab);
+        }}
+        onUpdateListingStatus={handleUpdateListingStatus}
         onSignOut={async () => {
           await signOut();
           setCurrentUserId(null);
           setCurrentUserEmail('');
           setCurrentProfile(null);
           setSavedIds([]);
+          setMyListingRows([]);
           setAdminOpen(false);
           setReadAtByThread({});
           setUnreadMessages(0);
@@ -2875,7 +3270,7 @@ export default function App() {
   };
 
   return (
-    <Shell>
+    <Shell themeMode={themeMode}>
       {loading ? (
         <div className="flex min-h-screen items-center justify-center text-sm text-stone-400">Loading marketplace...</div>
       ) : (
@@ -2908,6 +3303,25 @@ export default function App() {
             show(authMode === 'signin' ? 'Signed in' : 'Account created', 'success');
           }}
         />
+      ) : null}
+
+      {pendingDeleteListing ? (
+        <div className="fixed inset-0 z-40 flex items-end bg-stone-950/70 px-4 pb-4 backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-md rounded-3xl border border-white/10 bg-stone-950 p-4">
+            <h2 className="text-lg font-semibold">Delete this listing?</h2>
+            <p className="mt-2 text-sm text-stone-400">
+              {listingTitle(pendingDeleteListing)} will be removed from the marketplace. This cannot be undone.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setPendingDeleteListing(null)} className="rounded-2xl border border-white/10 px-4 py-3 text-sm text-stone-200">
+                Cancel
+              </button>
+              <button type="button" onClick={handleDeleteListing} className="rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {toast ? (

@@ -63,6 +63,18 @@ export async function loadListings() {
   return data.map(rowToListing);
 }
 
+export async function loadMyListings(userId) {
+  const id = userId || await uid();
+  if (!id) return [];
+  const { data, error } = await supabase
+    .from('listings')
+    .select('*, seller:profiles!seller_id(id, name, phone, email, business_name, role)')
+    .eq('seller_id', id)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('loadMyListings:', error); return []; }
+  return data.map(rowToListing);
+}
+
 export async function createListing(listing) {
   const sellerId = await uid();
   if (!sellerId) throw new Error('You must be signed in to post a listing.');
@@ -128,21 +140,74 @@ export async function uploadPhoto(file) {
 
 /* ---------- MESSAGES ---------- */
 
-export async function loadThreads() {
+export async function loadThreadReadMap() {
+  const userId = await uid();
+  if (!userId) return {};
+  const { data, error } = await supabase
+    .from('thread_reads')
+    .select('thread_id, read_at')
+    .eq('user_id', userId);
+  if (error) {
+    console.info('thread_reads unavailable; using local read state only:', error.message);
+    return {};
+  }
+  return Object.fromEntries((data || []).map((row) => [row.thread_id, new Date(row.read_at).getTime()]));
+}
+
+export async function markThreadRead(threadId) {
+  const userId = await uid();
+  if (!userId || !threadId) return null;
+  const readAt = new Date().toISOString();
+  const { error } = await supabase
+    .from('thread_reads')
+    .upsert({ thread_id: threadId, user_id: userId, read_at: readAt }, { onConflict: 'thread_id,user_id' });
+  if (error) {
+    console.info('Could not persist thread read state:', error.message);
+    return null;
+  }
+  return readAt;
+}
+
+export async function loadThreads(readAtByThread = {}) {
   const userId = await uid();
   if (!userId) return [];
   const { data, error } = await supabase
     .from('threads')
     .select(`
       *,
-      listing:listings(id, title, price, currency, photos, property_type, listing_type, location, city, area, seller_id),
+      listing:listings(id, title, price, currency, photos, property_type, listing_type, location, city, area, seller_id, status),
       buyer:profiles!buyer_id(id, name, email, phone),
       seller:profiles!seller_id(id, name, email, phone, business_name)
     `)
     .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data || [];
+
+  const threads = data || [];
+  const threadIds = threads.map((thread) => thread.id).filter(Boolean);
+  if (!threadIds.length) return threads;
+
+  const { data: messages, error: messagesError } = await supabase
+    .from('messages')
+    .select('id, thread_id, sender_id, body, created_at')
+    .in('thread_id', threadIds)
+    .order('created_at', { ascending: false });
+  if (messagesError) throw messagesError;
+
+  const meta = new Map();
+  (messages || []).forEach((message) => {
+    const existing = meta.get(message.thread_id) || { unreadCount: 0, lastMessage: null };
+    if (!existing.lastMessage) existing.lastMessage = message;
+    const readAt = readAtByThread[message.thread_id];
+    if (message.sender_id !== userId && (!readAt || new Date(message.created_at).getTime() > readAt)) {
+      existing.unreadCount += 1;
+    }
+    meta.set(message.thread_id, existing);
+  });
+
+  return threads
+    .map((thread) => ({ ...thread, ...(meta.get(thread.id) || { unreadCount: 0, lastMessage: null }) }))
+    .sort((a, b) => new Date(b.lastMessage?.created_at || b.created_at).getTime() - new Date(a.lastMessage?.created_at || a.created_at).getTime());
 }
 
 export async function loadThreadMessages(threadId) {
