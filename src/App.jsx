@@ -1053,7 +1053,7 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
 
   return (
     <div className="fixed inset-0 z-30 bg-black">
-      <div className="mx-auto flex min-h-screen max-w-md flex-col overflow-hidden rounded-t-[1.25rem] bg-[#17181b] text-stone-100">
+      <div className="mx-auto flex h-dvh max-w-md flex-col overflow-hidden rounded-t-[1.25rem] bg-[#17181b] text-stone-100">
         <div className="shrink-0 px-4 pb-3 pt-5">
           <div className="flex items-center justify-between">
             <button type="button" onClick={onClose} className="h-9 rounded-full border border-white/10 px-5 text-sm tracking-wide text-emerald-300">
@@ -1078,7 +1078,7 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-20">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-28">
           {mode === 'For Rent' ? (
             <EnhancedRentFilters filters={filters} update={update} toggleProperty={toggleProperty} toggleFeature={toggleFeature} toggleFlag={toggleFlag} />
           ) : (
