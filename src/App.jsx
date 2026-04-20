@@ -1943,19 +1943,13 @@ function AdminScreen({ onBack, onToast, onListingsChanged }) {
     setFeaturedUpdatingIds((prev) => new Set(prev).add(listing.id));
     try {
       const adminId = await getCurrentUserId();
-      await adminUpdateListing(listing.id, {
+      const updatedListing = await adminUpdateListing(listing.id, {
         featured,
         featured_at: featured ? new Date().toISOString() : null,
         featured_until: null,
         featured_by: featured ? adminId : null,
       });
-      setListings((prev) => prev.map((item) => (item.id === listing.id ? {
-        ...item,
-        featured,
-        featuredAt: featured ? Date.now() : null,
-        featuredUntil: null,
-        featuredBy: featured ? adminId : null,
-      } : item)));
+      setListings((prev) => prev.map((item) => (item.id === listing.id ? updatedListing : item)));
       await onListingsChanged();
       onToast(featured ? 'Listing featured' : 'Listing removed from featured', 'success');
     } catch (error) {

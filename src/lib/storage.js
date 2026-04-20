@@ -434,7 +434,11 @@ export async function getAllListings() {
     .order("featured", { ascending: false })
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data || []).map(r => ({
+  return (data || []).map(rowToAdminListing);
+}
+
+function rowToAdminListing(r) {
+  return {
     id: r.id,
     sellerId: r.seller_id,
     sellerName: r.seller?.business_name || r.seller?.name || "Seller",
@@ -460,7 +464,7 @@ export async function getAllListings() {
     featuredBy: r.featured_by || null,
     featuredOrder: r.featured_order ?? null,
     createdAt: new Date(r.created_at).getTime(),
-  }));
+  };
 }
 
 export async function getAllReports() {
@@ -488,11 +492,17 @@ export async function adminUpdateReport(reportId, updates) {
 }
 
 export async function adminUpdateListing(id, updates) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("listings")
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("*, seller:profiles!seller_id(id, name, email, business_name)")
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    throw new Error("No listing was updated. Check the Supabase admin update policy for listings.");
+  }
+  return rowToAdminListing(data);
 }
 
 export async function updateListing(id, updates) {
