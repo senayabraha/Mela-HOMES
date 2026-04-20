@@ -500,7 +500,7 @@ export async function adminUpdateListing(id, updates) {
     .maybeSingle();
   if (error) throw error;
   if (!data) {
-    throw new Error("No listing was updated. Check the Supabase admin update policy for listings.");
+    throw new Error("No listing was updated. Supabase RLS is blocking this admin action. Run supabase-admin-featured-policies.sql in the Supabase SQL Editor, then sign out and back in.");
   }
   return rowToAdminListing(data);
 }

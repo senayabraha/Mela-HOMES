@@ -27,6 +27,8 @@ as $$
   );
 $$;
 
+grant execute on function public.is_current_user_admin() to authenticated;
+
 do $$
 begin
   if not exists (
