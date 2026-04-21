@@ -1753,12 +1753,38 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
     );
   };
 
+  const appearanceControls = (
+    <>
+      <SectionButton section="appearance" icon={Palette} label="Appearance" detail={`Current: ${themeMode}`} />
+      {openSection === 'appearance' ? (
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-white">Appearance</div>
+              <p className="mt-1 text-xs text-stone-500">Keep the premium dark look or preview a cleaner light marketplace style.</p>
+            </div>
+            <div className="rounded-full border border-white/10 bg-stone-950/40 px-2 py-1 text-[10px] uppercase tracking-wide text-stone-400">
+              {themeMode}
+            </div>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <ThemeButton value="dark" label="Dark" />
+            <ThemeButton value="light" label="Light" />
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
     <div className="pb-24">
       <TopBar title="Account" subtitle={currentUserId ? 'Manage your profile and listings' : 'Sign in to post and save'} />
       <div className="space-y-4 px-4 pt-4">
         {!currentUserId ? (
-          <EmptyState title="Your account is not connected" text="Sign in to save homes and manage listings." action="Sign in" onAction={onOpenAuth} />
+          <>
+            <EmptyState title="Your account is not connected" text="Sign in to save homes and manage listings." action="Sign in" onAction={onOpenAuth} />
+            <div className="space-y-2">{appearanceControls}</div>
+          </>
         ) : (
           <>
             <div className="grid grid-cols-4 gap-2">
@@ -1804,24 +1830,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                 <SectionButton section="admin" icon={Shield} label="Admin Dashboard" detail="Manage users, listings, and reports" onClick={onOpenAdmin} />
               ) : null}
 
-              <SectionButton section="appearance" icon={Palette} label="Appearance" detail={`Current: ${themeMode}`} />
-              {openSection === 'appearance' ? (
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-white">Appearance</div>
-                      <p className="mt-1 text-xs text-stone-500">Keep the premium dark look or preview a cleaner light marketplace style.</p>
-                    </div>
-                    <div className="rounded-full border border-white/10 bg-stone-950/40 px-2 py-1 text-[10px] uppercase tracking-wide text-stone-400">
-                      {themeMode}
-                    </div>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <ThemeButton value="dark" label="Dark" />
-                    <ThemeButton value="light" label="Light" />
-                  </div>
-                </div>
-              ) : null}
+              {appearanceControls}
 
               <SectionButton section="listings" icon={Store} label="My Listings" detail={`${myListings.length} total, ${activeListings} active`} />
               {openSection === 'listings' ? (
