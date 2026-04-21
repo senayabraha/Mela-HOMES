@@ -12,29 +12,16 @@ import { supabase } from './supabase';
 */
 
 let _cachedUser = null;
-const ADMIN_EMAILS = ['senayabraha.w@gmail.com'];
-
-function normalizeEmail(value) {
-  return String(value || '').replace(/\s+/g, '').toLowerCase();
-}
-
-function withLocalAdmin(profile) {
-  if (!profile) return profile;
-  if (ADMIN_EMAILS.includes(normalizeEmail(profile.email))) {
-    return { ...profile, is_admin: true };
-  }
-  return profile;
-}
 
 function profileFromAuthUser(user) {
   if (!user) return null;
-  return withLocalAdmin({
+  return {
     id: user.id,
     email: user.email,
     name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
     phone: user.user_metadata?.phone || null,
     role: 'buyer',
-  });
+  };
 }
 
 export async function getCurrentUser() {
@@ -328,7 +315,7 @@ export async function getCurrentProfile(userId) {
     console.error('getCurrentProfile:', error);
     return user?.id === id ? profileFromAuthUser(user) : null;
   }
-  return withLocalAdmin(data) || (user?.id === id ? profileFromAuthUser(user) : null);
+  return data || (user?.id === id ? profileFromAuthUser(user) : null);
 }
 
 export async function ensureCurrentProfile(profileData = {}) {
@@ -489,7 +476,7 @@ export async function getAllUsers() {
     .select("*")
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data || []).map(withLocalAdmin);
+  return data || [];
 }
 
 export async function getAllListings() {

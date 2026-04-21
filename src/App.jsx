@@ -1,14 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Bath,
   BedDouble,
   Building2,
   Camera,
-  ChevronLeft,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
-  Filter,
   Heart,
   Home,
   LogOut,
@@ -28,31 +27,20 @@ import {
   Trash2,
   UserRound,
   X,
-  CalendarDays,
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import {
-  createListing,
-  adminDeleteListing,
-  adminUpdateListing,
-  adminUpdateProfile,
-  adminUpdateReport,
   deleteListing,
   ensureCurrentProfile,
-  getAdminStats,
-  getAllListings,
-  getAllReports,
-  getAllUsers,
   getCurrentUser,
   getCurrentProfile,
-  getCurrentUserId,
-  loadThreadReadMap,
-  loadUnreadMessageCount,
   loadThreadMessages,
+  loadThreadReadMap,
+  loadThreads,
+  loadUnreadMessageCount,
   loadListings,
   loadMyListings,
   loadSavedIds,
-  loadThreads,
   markThreadRead,
   resetPassword,
   sendThreadMessage,
@@ -64,182 +52,28 @@ import {
   toggleSaved,
   updateListing,
   updateProfile,
-  uploadPhoto,
 } from './lib/storage';
-
-const PROPERTY_TYPES = ['Apartment', 'House', 'Villa', 'Townhouse', 'Studio', 'Land', 'Commercial', 'Office'];
-const LISTING_TYPES = ['For Sale', 'For Rent'];
-const ACCOUNT_ROLES = ['buyer', 'owner', 'agent', 'broker', 'developer'];
-const LISTING_STATUS_OPTIONS = [
-  { label: 'Active', value: 'active' },
-  { label: 'Paused', value: 'paused' },
-  { label: 'Sold', value: 'sold' },
-  { label: 'Rented', value: 'rented' },
-];
-const FURNISHED_OPTIONS = ['Furnished', 'Semi-Furnished', 'Unfurnished'];
-const CONDITIONS = ['new', 'used', 'renovated'];
-const FEATURES = ['Parking', 'Garden', 'Security', 'Balcony', 'Elevator', 'Backup Generator', 'Water Tank', 'CCTV', 'Gym', 'Pool'];
-const COUNTRIES = ['Ethiopia', 'Kenya', 'Uganda', 'Tanzania', 'Rwanda', 'Djibouti', 'Somalia', 'South Sudan'];
-const CURRENCIES = ['ETB', 'KES', 'UGX', 'TZS', 'RWF', 'USD'];
-const COUNTRY_LIST = COUNTRIES;
-const COUNTRIES_DATA = {
-  Ethiopia: { flag: 'ET', currency: 'ETB', regions: ['Addis Ababa', 'Afar', 'Amhara', 'Benishangul-Gumuz', 'Dire Dawa', 'Gambela', 'Harari', 'Oromia', 'Sidama', 'Somali', 'South Ethiopia', 'South West Ethiopia', 'Tigray', 'Central Ethiopia'] },
-  Kenya: { flag: 'KE', currency: 'KES', regions: ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru', 'Uasin Gishu', 'Kiambu', 'Machakos', 'Kajiado', 'Kilifi', 'Meru', 'Nyeri', 'Kakamega'] },
-  Uganda: { flag: 'UG', currency: 'UGX', regions: ['Central', 'Eastern', 'Northern', 'Western'] },
-  Tanzania: { flag: 'TZ', currency: 'TZS', regions: ['Dar es Salaam', 'Arusha', 'Mwanza', 'Dodoma', 'Mbeya', 'Morogoro', 'Tanga'] },
-  Rwanda: { flag: 'RW', currency: 'RWF', regions: ['Kigali', 'Eastern', 'Northern', 'Southern', 'Western'] },
-  Djibouti: { flag: 'DJ', currency: 'DJF', regions: ['Djibouti', 'Ali Sabieh', 'Dikhil', 'Tadjourah', 'Obock', 'Arta'] },
-  Somalia: { flag: 'SO', currency: 'SOS', regions: ['Banadir', 'Awdal', 'Bari', 'Bay', 'Mudug', 'Nugaal', 'Woqooyi Galbeed'] },
-  'South Sudan': { flag: 'SS', currency: 'SSP', regions: ['Central Equatoria', 'Eastern Equatoria', 'Jonglei', 'Unity', 'Upper Nile', 'Lakes', 'Warrap'] },
-};
-const CITIES_BY_COUNTRY_REGION = {
-  'Ethiopia|Addis Ababa': ['Addis Ababa'],
-  'Ethiopia|Amhara': ['Bahir Dar', 'Gondar', 'Dessie', 'Debre Birhan', 'Lalibela', 'Debre Markos', 'Woldia', 'Kombolcha'],
-  'Ethiopia|Oromia': ['Adama', 'Jimma', 'Bishoftu', 'Shashemene', 'Sebeta', 'Nekemte', 'Asella', 'Ambo', 'Burayu', 'Holeta', 'Woliso'],
-  'Ethiopia|Sidama': ['Hawassa'],
-  'Ethiopia|South Ethiopia': ['Arba Minch', 'Wolaita Sodo', 'Dilla', 'Hosaena'],
-  'Ethiopia|Tigray': ['Mekelle', 'Adigrat', 'Axum', 'Shire', 'Adwa'],
-  'Ethiopia|Dire Dawa': ['Dire Dawa'],
-  'Ethiopia|Harari': ['Harar'],
-  'Ethiopia|Afar': ['Semera', 'Logia', 'Chifra'],
-  'Ethiopia|Somali': ['Jigjiga', 'Gode', 'Dolo Odo'],
-  'Kenya|Nairobi': ['Nairobi'],
-  'Kenya|Mombasa': ['Mombasa'],
-  'Kenya|Kisumu': ['Kisumu'],
-  'Kenya|Nakuru': ['Nakuru', 'Naivasha', 'Gilgil'],
-  'Kenya|Kiambu': ['Thika', 'Kiambu', 'Ruiru', 'Limuru', 'Githunguri'],
-  'Kenya|Uasin Gishu': ['Eldoret', 'Turbo', 'Moiben'],
-  'Kenya|Machakos': ['Machakos', 'Athi River', 'Kangundo'],
-  'Uganda|Central': ['Kampala', 'Entebbe', 'Wakiso', 'Mukono', 'Jinja'],
-  'Uganda|Eastern': ['Jinja', 'Mbale', 'Tororo', 'Iganga'],
-  'Uganda|Northern': ['Gulu', 'Lira', 'Arua'],
-  'Uganda|Western': ['Mbarara', 'Kasese', 'Fort Portal', 'Masindi'],
-  'Tanzania|Dar es Salaam': ['Dar es Salaam'],
-  'Tanzania|Arusha': ['Arusha', 'Moshi'],
-  'Tanzania|Mwanza': ['Mwanza'],
-  'Tanzania|Dodoma': ['Dodoma'],
-  'Rwanda|Kigali': ['Kigali'],
-  'Rwanda|Eastern': ['Rwamagana', 'Nyagatare', 'Kibungo'],
-  'Rwanda|Southern': ['Huye', 'Muhanga', 'Ruhango'],
-  'Rwanda|Northern': ['Musanze', 'Byumba'],
-  'Rwanda|Western': ['Rubavu', 'Rusizi', 'Karongi'],
-  'Djibouti|Djibouti': ['Djibouti'],
-  'Djibouti|Ali Sabieh': ['Ali Sabieh'],
-  'Somalia|Banadir': ['Mogadishu'],
-  'Somalia|Woqooyi Galbeed': ['Hargeisa', 'Berbera'],
-};
-const AREAS_BY_COUNTRY_CITY = {
-  'Ethiopia|Addis Ababa': ['Alem Bank', 'Arat Kilo', 'Ayat', 'Bole', 'CMC', 'Gerji', 'Jemo', 'Kazanchis', 'Mexico', 'Old Airport', 'Piazza', 'Sarbet', 'Summit', 'Yeka'],
-  'Ethiopia|Bahir Dar': ['Abay Mado', 'Ghion', 'Shimbit', 'Stadium Area', 'Tana Sub-City'],
-  'Ethiopia|Gondar': ['Azezo', 'Fasil Ghebbi Area', 'Maraki', 'Piazza Gondar', 'University Area'],
-  'Ethiopia|Adama': ['Adama City Center', 'Boku', 'Industrial Area', 'Nazret', 'Stadium Area'],
-  'Ethiopia|Jimma': ['Jimma City Center', 'Jiren', 'Merkato Jimma', 'Stadium Area', 'University Area'],
-  'Ethiopia|Hawassa': ['Lake Side', 'Mehal Ketema', 'Piassa Hawassa', 'Secha', 'University Area'],
-  'Ethiopia|Mekelle': ['Adi Haki', 'Ayder', 'Hadnet', 'Quiha', 'University Area'],
-  'Ethiopia|Dire Dawa': ['Addis Ketema', 'Kezira', 'Legehare', 'Railway Area', 'Sabian'],
-  'Kenya|Nairobi': ['CBD', 'Karen', 'Kilimani', 'Kileleshwa', 'Lavington', 'Parklands', 'Runda', 'Westlands'],
-  'Kenya|Mombasa': ['Bamburi', 'Kisauni', 'Nyali', 'Old Town', 'Tudor'],
-  'Kenya|Kisumu': ['Kisumu CBD', 'Milimani', 'Mamboleo', 'Migosi'],
-  'Uganda|Kampala': ['Bugolobi', 'Bukoto', 'Kololo', 'Muyenga', 'Nakasero', 'Ntinda'],
-  'Uganda|Entebbe': ['Airport Zone', 'Bugonga', 'Entebbe Town', 'Katabi'],
-  'Tanzania|Dar es Salaam': ['Kariakoo', 'Masaki', 'Mikocheni', 'Msasani', 'Oyster Bay', 'Upanga'],
-  'Tanzania|Arusha': ['Arusha CBD', 'Njiro', 'Sanawari', 'Sekei'],
-  'Rwanda|Kigali': ['Kacyiru', 'Kibagabaga', 'Kimihurura', 'Kimironko', 'Remera'],
-  'Djibouti|Djibouti': ['Arhiba', 'Balbala', 'Gabode', 'Port Area'],
-  'Somalia|Mogadishu': ['Hodan', 'Karaan', 'Shangani', 'Waberi', 'Wadajir'],
-};
-const CURRENCY_BY_COUNTRY = {
-  Ethiopia: 'ETB',
-  Kenya: 'KES',
-  Uganda: 'UGX',
-  Tanzania: 'TZS',
-  Rwanda: 'RWF',
-  Djibouti: 'DJF',
-  Somalia: 'SOS',
-  'South Sudan': 'SSP',
-};
-const FILTER_SECTIONS = ['Location', 'Listing type', 'Property type', 'Price & payment', 'Bedrooms', 'Bathrooms', 'Size', 'Furnishing', 'Condition', 'Features'];
-const PRICE_MIN_BOUND = 0;
-const PRICE_MAX_BOUND = 100000000;
-const SIZE_MIN_BOUND = 0;
-const SIZE_MAX_BOUND = 5000;
-const ADMIN_EMAILS = ['senayabraha.w@gmail.com'];
-const SELL_DRAFT_KEY = 'mela_homes_listing_draft';
-const MAX_LISTING_PHOTOS = 10;
-const LISTING_STEP_KEYS = ['details', 'location', 'photos', 'review'];
-const LISTING_STEP_LABELS = {
-  details: 'Details',
-  location: 'Location',
-  photos: 'Photos',
-  review: 'Review',
-};
-
-const INITIAL_FILTERS = {
-  listingType: '',
-  propertyType: '',
-  minPrice: null,
-  maxPrice: null,
-  bedrooms: null,
-  bathrooms: null,
-  country: 'Ethiopia',
-  region: null,
-  city: null,
-  area: null,
-  furnished: null,
-  condition: null,
-  sizeMin: null,
-  sizeMax: null,
-  rentPeriod: null,
-  petFriendly: false,
-  familyOnly: false,
-  studentsAllowed: false,
-  shortTermAllowed: false,
-  longTermPreferred: false,
-  utilitiesIncluded: false,
-  availableNow: false,
-  depositRequired: false,
-  financingAvailable: false,
-  negotiable: false,
-  exchangeAccepted: false,
-  titleDeedAvailable: false,
-  byOwner: false,
-  byAgent: false,
-  landSizeMin: null,
-  landSizeMax: null,
-  yearBuiltMin: null,
-  yearBuiltMax: null,
-  features: null,
-};
-
-const INITIAL_FORM = {
-  title: '',
-  propertyType: 'Apartment',
-  listingType: 'For Sale',
-  bedrooms: '',
-  bathrooms: '',
-  sizeSqm: '',
-  floor: '',
-  totalFloors: '',
-  furnished: '',
-  parking: false,
-  garden: false,
-  rentPeriod: '',
-  price: '',
-  currency: 'ETB',
-  condition: 'used',
-  country: 'Ethiopia',
-  region: '',
-  city: '',
-  area: '',
-  location: '',
-  landmark: '',
-  description: '',
-  features: [],
-  negotiable: false,
-  financingAvailable: false,
-  exchangeAccepted: false,
-  photos: [],
-};
+import {
+  ACCOUNT_ROLES,
+  CONDITIONS,
+  COUNTRIES,
+  COUNTRIES_DATA,
+  COUNTRY_LIST,
+  CURRENCIES,
+  CURRENCY_BY_COUNTRY,
+  FEATURES,
+  FILTER_SECTIONS,
+  FURNISHED_OPTIONS,
+  INITIAL_FILTERS,
+  LISTING_STATUS_OPTIONS,
+  PRICE_MAX_BOUND,
+  PRICE_MIN_BOUND,
+  SIZE_MAX_BOUND,
+  SIZE_MIN_BOUND,
+} from './houseData';
+import { AdminScreen } from './lib/AdminScreen';
+import { SellScreen } from './lib/SellScreen';
+import { areasOf, citiesOf, countActiveFilters, formatPrice, isAdminProfile, listingLocation, listingTitle, matchesFilters, regionsOf } from './lib/houseUtils';
 
 function useToast() {
   const [toast, setToast] = useState(null);
@@ -257,121 +91,47 @@ function useToast() {
   return { toast, show, clear: () => setToast(null) };
 }
 
-function formatPrice(value, currency = 'ETB') {
-  const amount = Number(value || 0);
-  if (!amount) return `0 ${currency}`;
-  return `${new Intl.NumberFormat().format(amount)} ${currency}`;
-}
+const APP_BOOT_TIMEOUT_MS = 12000;
+const SHOP_STATE_STORAGE_KEY = 'melaHomesShopState';
+const TAB_SCROLL_STORAGE_KEY = 'melaHomesTabScroll';
 
-function listingTitle(listing) {
-  if (listing.title?.trim()) return listing.title.trim();
-  const beds = listing.bedrooms ? `${listing.bedrooms} Bed` : '';
-  return [beds, listing.propertyType].filter(Boolean).join(' ') || 'Property Listing';
-}
+function withTimeout(promise, timeoutMessage, timeoutMs = APP_BOOT_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
 
-function listingLocation(listing) {
-  return [listing.area, listing.city, listing.country].filter(Boolean).join(', ');
-}
-
-function generatedListingTitle(form) {
-  const beds = form.bedrooms ? `${form.bedrooms} Bed` : '';
-  const type = form.propertyType || 'Property';
-  const listingType = form.listingType ? form.listingType.toLowerCase() : 'listing';
-  const place = form.area || form.city;
-  return `${[beds, type].filter(Boolean).join(' ')} ${listingType}${place ? ` in ${place}` : ''}`;
-}
-
-function regionsOf(country) {
-  return (COUNTRIES_DATA[country] || {}).regions || [];
-}
-
-function citiesOf(country, region) {
-  return CITIES_BY_COUNTRY_REGION[`${country}|${region}`] || [];
-}
-
-function areasOf(country, city) {
-  return AREAS_BY_COUNTRY_CITY[`${country}|${city}`] || [];
-}
-
-function formatCompactMoney(value, currency = 'ETB') {
-  if (value == null) return `${currency} 0`;
-  if (value >= 1000000) return `${currency} ${(value / 1000000).toFixed(value % 1000000 === 0 ? 0 : 1)}M`;
-  if (value >= 1000) return `${currency} ${(value / 1000).toFixed(0)}K`;
-  return `${currency} ${Number(value).toLocaleString()}`;
-}
-
-function normalizeEmail(value) {
-  return String(value || '').replace(/\s+/g, '').toLowerCase();
-}
-
-function isAdminProfile(profile, authEmail = '') {
-  return profile?.is_admin === true || ADMIN_EMAILS.includes(normalizeEmail(profile?.email)) || ADMIN_EMAILS.includes(normalizeEmail(authEmail));
-}
-
-function matchesFilters(listing, query, filters) {
-  const text = query.trim().toLowerCase();
-  if (text) {
-    const haystack = [
-      listingTitle(listing),
-      listing.propertyType,
-      listing.listingType,
-      listing.city,
-      listing.area,
-      listing.country,
-      listing.description,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-    if (!haystack.includes(text)) return false;
-  }
-
-  if (filters.listingType && listing.listingType !== filters.listingType) return false;
-  if (filters.propertyType && listing.propertyType !== filters.propertyType) return false;
-  if (filters.country && listing.country !== filters.country) return false;
-  if (filters.region && listing.region !== filters.region) return false;
-  if (filters.city && listing.city !== filters.city) return false;
-  if (filters.area && listing.area !== filters.area) return false;
-  if (filters.bedrooms != null && Number(listing.bedrooms || 0) < Number(filters.bedrooms)) return false;
-  if (filters.bathrooms != null && Number(listing.bathrooms || 0) < Number(filters.bathrooms)) return false;
-  if (filters.minPrice != null && Number(listing.price || 0) < Number(filters.minPrice)) return false;
-  if (filters.maxPrice != null && Number(listing.price || 0) > Number(filters.maxPrice)) return false;
-  if (filters.sizeMin != null && Number(listing.sizeSqm || 0) < Number(filters.sizeMin)) return false;
-  if (filters.sizeMax != null && Number(listing.sizeSqm || 0) > Number(filters.sizeMax)) return false;
-  if (filters.furnished && listing.furnished !== filters.furnished) return false;
-  if (filters.condition && String(listing.condition || '').toLowerCase() !== String(filters.condition).toLowerCase()) return false;
-  if (filters.rentPeriod && listing.rentPeriod !== filters.rentPeriod) return false;
-  if (filters.financingAvailable && !listing.financingAvailable) return false;
-  if (filters.negotiable && !listing.negotiable) return false;
-  if (filters.exchangeAccepted && !listing.exchangeAccepted) return false;
-  if (filters.features?.length) {
-    const searchableFeatures = filters.features.filter((feature) => FEATURES.includes(feature) || ['Pet friendly', 'Family only', 'Students allowed', 'Short-term allowed', 'Long-term preferred', 'Utilities included', 'Available now', 'Deposit required', 'Title deed available', 'By owner', 'By agent', 'New construction'].includes(feature));
-    for (const feature of searchableFeatures) {
-      if (!(listing.features || []).includes(feature)) return false;
-    }
-  }
-  return true;
-}
-
-function countActiveFilters(filters) {
-  let count = 0;
-  ['listingType', 'propertyType', 'region', 'city', 'area', 'furnished', 'condition'].forEach((key) => {
-    if (filters[key]) count += 1;
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      });
   });
-  if (filters.country && filters.country !== 'Ethiopia') count += 1;
-  if (filters.minPrice != null || filters.maxPrice != null) count += 1;
-  if (filters.bedrooms != null) count += 1;
-  if (filters.bathrooms != null) count += 1;
-  if (filters.sizeMin != null || filters.sizeMax != null) count += 1;
-  if (filters.rentPeriod) count += 1;
-  if (filters.landSizeMin != null || filters.landSizeMax != null) count += 1;
-  if (filters.yearBuiltMin != null || filters.yearBuiltMax != null) count += 1;
-  ['petFriendly', 'familyOnly', 'studentsAllowed', 'shortTermAllowed', 'longTermPreferred', 'utilitiesIncluded', 'availableNow', 'depositRequired', 'financingAvailable', 'negotiable', 'exchangeAccepted', 'titleDeedAvailable', 'byOwner', 'byAgent'].forEach((key) => {
-    if (filters[key]) count += 1;
-  });
-  if (filters.features?.length) count += 1;
-  return count;
 }
+
+function readSessionJson(key, fallback) {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSessionJson(key, value) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Session storage can be unavailable in strict privacy modes.
+  }
+}
+
 
 function RangeSlider({ min, max, step = 1, valueMin, valueMax, onChange, format = (value) => value }) {
   const lo = Math.max(min, Math.min(valueMin == null ? min : valueMin, max));
@@ -1499,340 +1259,6 @@ function EnhancedSaleFilters({ filters, update, toggleProperty, toggleFeature, t
   );
 }
 
-function SellScreen({ currentUserId, currentProfile, onCreated, onNeedAuth, editingListing, onCancelEdit, onSaved, onToast }) {
-  const [form, setForm] = useState(() => {
-    if (editingListing) return toForm(editingListing);
-    try {
-      const draft = window.localStorage.getItem(SELL_DRAFT_KEY);
-      return draft ? { ...INITIAL_FORM, ...JSON.parse(draft) } : INITIAL_FORM;
-    } catch {
-      return INITIAL_FORM;
-    }
-  });
-  const [step, setStep] = useState('details');
-  const [submitting, setSubmitting] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  useEffect(() => {
-    if (editingListing) {
-      setForm(toForm(editingListing));
-      setStep('details');
-    }
-  }, [editingListing]);
-
-  const stepIndex = LISTING_STEP_KEYS.indexOf(step);
-  const cityOptions = form.region ? citiesOf(form.country, form.region) : [];
-  const areaOptions = form.city ? areasOf(form.country, form.city) : [];
-  const generatedTitle = generatedListingTitle(form);
-  const visibleFeatures = FEATURES.filter((feature) => !['Parking', 'Garden'].includes(feature));
-  const previewListing = {
-    ...form,
-    title: form.title || generatedTitle,
-    photoUrl: form.photos[0] || null,
-    sellerId: currentUserId,
-    sellerName: currentProfile?.name || currentProfile?.email || 'Seller',
-  };
-
-  const validation = useMemo(() => {
-    const errors = {};
-    if (!currentUserId) errors.auth = 'Sign in before publishing a listing.';
-    if (!form.propertyType) errors.propertyType = 'Choose a property type.';
-    if (!form.listingType) errors.listingType = 'Choose sale or rent.';
-    if (!form.price || Number(form.price) <= 0) errors.price = 'Add a valid price.';
-    if (!form.country) errors.country = 'Choose a country.';
-    if (!form.region) errors.region = 'Choose a region.';
-    if (!form.city) errors.city = 'Choose a city.';
-    if (!form.photos.length) errors.photos = 'Add at least one property photo.';
-    if (uploading) errors.photos = 'Wait for photos to finish uploading.';
-    if (String(form.description || '').trim().length < 30) errors.description = 'Write at least 30 characters.';
-    if (form.listingType === 'For Rent' && !form.rentPeriod) errors.rentPeriod = 'Choose a rent period.';
-    return errors;
-  }, [currentUserId, form, uploading]);
-
-  const stepErrors = {
-    details: ['auth', 'propertyType', 'listingType', 'price', 'rentPeriod'],
-    location: ['country', 'region', 'city'],
-    photos: ['photos'],
-    review: ['description'],
-  };
-  const currentStepErrors = stepErrors[step].map((key) => validation[key]).filter(Boolean);
-  const canSubmit = currentUserId && Object.keys(validation).length === 0 && !submitting;
-
-  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-  const updateCountry = (value) => {
-    setForm((prev) => ({
-      ...prev,
-      country: value,
-      region: '',
-      city: '',
-      area: '',
-      currency: CURRENCY_BY_COUNTRY[value] || prev.currency,
-    }));
-  };
-  const updateRegion = (value) => setForm((prev) => ({ ...prev, region: value, city: '', area: '' }));
-  const updateCity = (value) => setForm((prev) => ({ ...prev, city: value, area: '' }));
-  const toggleFeature = (feature) => {
-    setForm((prev) => {
-      const features = prev.features || [];
-      return { ...prev, features: features.includes(feature) ? features.filter((item) => item !== feature) : [...features, feature] };
-    });
-  };
-  const movePhoto = (from, to) => {
-    if (to < 0 || to >= form.photos.length) return;
-    setForm((prev) => {
-      const photos = [...prev.photos];
-      const [photo] = photos.splice(from, 1);
-      photos.splice(to, 0, photo);
-      return { ...prev, photos };
-    });
-  };
-  const saveDraft = () => {
-    window.localStorage.setItem(SELL_DRAFT_KEY, JSON.stringify(form));
-    onToast('Draft saved on this device', 'success');
-  };
-  const clearDraft = () => {
-    window.localStorage.removeItem(SELL_DRAFT_KEY);
-    if (!editingListing) setForm(INITIAL_FORM);
-    onToast('Draft cleared', 'info');
-  };
-
-  const handleFiles = async (event) => {
-    const files = Array.from(event.target.files || []).slice(0, Math.max(0, MAX_LISTING_PHOTOS - form.photos.length));
-    event.target.value = '';
-    if (!files.length) {
-      if (form.photos.length >= MAX_LISTING_PHOTOS) onToast(`You can upload up to ${MAX_LISTING_PHOTOS} photos`, 'info');
-      return;
-    }
-    if (!currentUserId) {
-      onNeedAuth();
-      return;
-    }
-    setUploading(true);
-    try {
-      const uploaded = [];
-      for (const file of files) {
-        uploaded.push(await uploadPhoto(file));
-      }
-      setForm((prev) => ({ ...prev, photos: [...prev.photos, ...uploaded].slice(0, MAX_LISTING_PHOTOS) }));
-    } catch (error) {
-      onToast(error.message || 'Could not upload photos', 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const goNext = () => {
-    if (currentStepErrors.length) {
-      onToast(currentStepErrors[0], 'error');
-      return;
-    }
-    setStep(LISTING_STEP_KEYS[Math.min(LISTING_STEP_KEYS.length - 1, stepIndex + 1)]);
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!currentUserId) {
-      onNeedAuth();
-      return;
-    }
-    if (!canSubmit) {
-      onToast(Object.values(validation)[0] || 'Finish the listing first', 'error');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await ensureCurrentProfile(currentProfile || {});
-      const payload = { ...form, title: form.title || generatedTitle };
-      if (editingListing) {
-        await updateListing(editingListing.id, payload);
-        await onSaved();
-      } else {
-        await createListing(payload);
-        window.localStorage.removeItem(SELL_DRAFT_KEY);
-        setForm(INITIAL_FORM);
-        setStep('details');
-        await onCreated();
-      }
-    } catch (error) {
-      onToast(error.message || 'Could not publish listing', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="pb-24">
-      <TopBar title={editingListing ? 'Edit Listing' : 'List a Property'} subtitle={currentProfile ? `Posting as ${currentProfile.name || currentProfile.email}` : 'Post for sale or rent'} />
-      <form onSubmit={submit} className="space-y-5 px-4 py-4">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {LISTING_STEP_KEYS.map((item, index) => (
-            <button key={item} type="button" onClick={() => setStep(item)} className={`shrink-0 rounded-full border px-3 py-2 text-xs font-semibold ${step === item ? 'border-emerald-400 bg-emerald-400/15 text-emerald-200' : 'border-white/10 bg-white/5 text-stone-400'}`}>
-              {index + 1}. {LISTING_STEP_LABELS[item]}
-            </button>
-          ))}
-        </div>
-
-        {currentStepErrors.length ? (
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
-            {currentStepErrors[0]}
-          </div>
-        ) : null}
-
-        {!currentProfile?.phone && currentUserId ? (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-stone-300">
-            Add a phone number in Account so buyers can reach you faster.
-          </div>
-        ) : null}
-
-        {step === 'details' ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-            <SectionTitle title="Details" />
-            <div className="grid grid-cols-2 gap-3">
-              <InputField label="Custom title" value={form.title} onChange={(value) => update('title', value)} placeholder={generatedTitle} className="col-span-2" />
-              <SelectField label="Property type" value={form.propertyType} onChange={(value) => update('propertyType', value)} options={PROPERTY_TYPES} />
-              <SelectField label="Listing type" value={form.listingType} onChange={(value) => update('listingType', value)} options={LISTING_TYPES} />
-              <InputField label="Bedrooms" value={form.bedrooms} onChange={(value) => update('bedrooms', value)} type="number" min="0" />
-              <InputField label="Bathrooms" value={form.bathrooms} onChange={(value) => update('bathrooms', value)} type="number" min="0" />
-              <InputField label="Size (sqm)" value={form.sizeSqm} onChange={(value) => update('sizeSqm', value)} type="number" min="0" />
-              <InputField label="Price" value={form.price} onChange={(value) => update('price', value)} type="number" min="0" />
-              <SelectField label="Currency" value={form.currency} onChange={(value) => update('currency', value)} options={CURRENCIES} />
-              <SelectField label="Condition" value={form.condition} onChange={(value) => update('condition', value)} options={CONDITIONS} />
-              <SelectField label="Furnishing" value={form.furnished} onChange={(value) => update('furnished', value)} options={['', ...FURNISHED_OPTIONS]} />
-              {form.listingType === 'For Rent' ? <SelectField label="Rent period" value={form.rentPeriod} onChange={(value) => update('rentPeriod', value)} options={['Monthly', 'Quarterly', 'Yearly']} /> : null}
-            </div>
-            <div className="mt-4 rounded-2xl bg-stone-950/40 p-3 text-xs text-stone-400">
-              Suggested title: <span className="text-stone-200">{generatedTitle}</span>
-            </div>
-          </div>
-        ) : null}
-
-        {step === 'location' ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-            <SectionTitle title="Location" />
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField label="Country" value={form.country} onChange={updateCountry} options={COUNTRIES} />
-              <SelectField label="Region" value={form.region} onChange={updateRegion} options={['', ...regionsOf(form.country)]} />
-              {cityOptions.length ? (
-                <SelectField label="City" value={form.city} onChange={updateCity} options={['', ...cityOptions]} />
-              ) : (
-                <InputField label="City" value={form.city} onChange={updateCity} />
-              )}
-              {areaOptions.length ? (
-                <SelectField label="Area" value={form.area} onChange={(value) => update('area', value)} options={['', ...areaOptions]} />
-              ) : (
-                <InputField label="Area" value={form.area} onChange={(value) => update('area', value)} />
-              )}
-              <InputField label="Landmark" value={form.landmark} onChange={(value) => update('landmark', value)} className="col-span-2" />
-              <InputField label="Address / location" value={form.location} onChange={(value) => update('location', value)} className="col-span-2" />
-            </div>
-          </div>
-        ) : null}
-
-        {step === 'photos' ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-            <SectionTitle title="Photos" />
-            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 bg-stone-950/40 px-4 py-4 text-sm text-stone-300 ${uploading || form.photos.length >= MAX_LISTING_PHOTOS ? 'opacity-60' : ''}`}>
-              <Camera className="h-4 w-4" />
-              {uploading ? 'Uploading photos...' : form.photos.length >= MAX_LISTING_PHOTOS ? 'Photo limit reached' : `Upload property photos (${form.photos.length}/${MAX_LISTING_PHOTOS})`}
-              <input type="file" accept="image/*" multiple disabled={uploading || form.photos.length >= MAX_LISTING_PHOTOS} onChange={handleFiles} className="hidden" />
-            </label>
-            {form.photos.length ? (
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                {form.photos.map((url, index) => (
-                  <div key={url} className="relative overflow-hidden rounded-2xl border border-white/10">
-                    <img src={url} alt="Listing" className="h-32 w-full object-cover" />
-                    {index === 0 ? <div className="absolute left-2 top-2 rounded-full bg-emerald-500 px-2 py-1 text-[10px] font-semibold text-stone-950">Cover</div> : null}
-                    <button type="button" onClick={() => update('photos', form.photos.filter((item) => item !== url))} className="absolute right-2 top-2 rounded-full bg-stone-950/75 p-1">
-                      <X className="h-3 w-3" />
-                    </button>
-                    <div className="grid grid-cols-3 gap-1 bg-stone-950/90 p-1 text-[10px]">
-                      <button type="button" onClick={() => movePhoto(index, 0)} className="rounded bg-white/10 px-1 py-1 text-stone-200">Cover</button>
-                      <button type="button" onClick={() => movePhoto(index, index - 1)} className="rounded bg-white/10 px-1 py-1 text-stone-200">Left</button>
-                      <button type="button" onClick={() => movePhoto(index, index + 1)} className="rounded bg-white/10 px-1 py-1 text-stone-200">Right</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <SectionTitle title="Features" />
-            <div className="flex flex-wrap gap-2">
-              {visibleFeatures.map((feature) => (
-                <Chip key={feature} active={form.features.includes(feature)} onClick={() => toggleFeature(feature)}>
-                  {feature}
-                </Chip>
-              ))}
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <ToggleField label="Parking" checked={form.parking} onChange={(value) => update('parking', value)} />
-              <ToggleField label="Garden" checked={form.garden} onChange={(value) => update('garden', value)} />
-              {form.listingType === 'For Rent' ? (
-                <>
-                  <ToggleField label="Utilities included" checked={form.features.includes('Utilities included')} onChange={() => toggleFeature('Utilities included')} />
-                  <ToggleField label="Available now" checked={form.features.includes('Available now')} onChange={() => toggleFeature('Available now')} />
-                </>
-              ) : (
-                <>
-                  <ToggleField label="Negotiable" checked={form.negotiable} onChange={(value) => update('negotiable', value)} />
-                  <ToggleField label="Financing available" checked={form.financingAvailable} onChange={(value) => update('financingAvailable', value)} />
-                  <ToggleField label="Title deed available" checked={form.features.includes('Title deed available')} onChange={() => toggleFeature('Title deed available')} />
-                  <ToggleField label="New construction" checked={form.features.includes('New construction')} onChange={() => toggleFeature('New construction')} />
-                </>
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {step === 'review' ? (
-          <>
-            <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <SectionTitle title="Description" />
-              <textarea
-                value={form.description}
-                onChange={(event) => update('description', event.target.value)}
-                rows={5}
-                placeholder="Tell buyers or renters what makes this property special."
-                className="w-full rounded-2xl border border-white/10 bg-stone-950/40 px-4 py-3 text-sm outline-none placeholder:text-stone-500"
-              />
-              <div className="mt-2 text-xs text-stone-500">{String(form.description || '').trim().length}/30 minimum characters</div>
-            </div>
-            <div>
-              <SectionTitle title="Preview" />
-              <ListingCard listing={previewListing} saved={false} onOpen={() => {}} onToggleSave={() => {}} ownListing />
-            </div>
-          </>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-3">
-          {stepIndex > 0 ? (
-            <button type="button" onClick={() => setStep(LISTING_STEP_KEYS[stepIndex - 1])} className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-stone-200">
-              Back
-            </button>
-          ) : (
-            <button type="button" onClick={saveDraft} className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-stone-200">
-              Save draft
-            </button>
-          )}
-          {step !== 'review' ? (
-            <button type="button" onClick={goNext} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
-              Continue
-            </button>
-          ) : (
-            <button type="submit" disabled={!canSubmit} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 disabled:opacity-50">
-              {submitting ? 'Saving...' : editingListing ? 'Update listing' : 'Publish listing'}
-            </button>
-          )}
-        </div>
-        <div className="flex justify-center gap-4 text-sm">
-          <button type="button" onClick={saveDraft} className="text-stone-400">Save draft</button>
-          {!editingListing ? <button type="button" onClick={clearDraft} className="text-stone-500">Clear draft</button> : null}
-          {editingListing ? <button type="button" onClick={onCancelEdit} className="text-stone-400">Cancel editing</button> : null}
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function AgentsScreen({ listings, onOpenListing }) {
   const agents = useMemo(() => {
     const grouped = new Map();
@@ -2240,317 +1666,6 @@ function rowToThreadListing(row) {
   };
 }
 
-function AdminScreen({ onBack, onToast, onListingsChanged }) {
-  const [tab, setTab] = useState('listings');
-  const [stats, setStats] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [listings, setListings] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [featuredFilter, setFeaturedFilter] = useState('all');
-  const [listingSearch, setListingSearch] = useState('');
-  const [featuredUpdatingIds, setFeaturedUpdatingIds] = useState(() => new Set());
-  const [adminActionError, setAdminActionError] = useState('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [nextStats, nextUsers, nextListings, nextReports] = await Promise.all([
-          getAdminStats(),
-          getAllUsers(),
-          getAllListings(),
-          getAllReports(),
-        ]);
-        if (!active) return;
-        setStats(nextStats);
-        setUsers(nextUsers);
-        setListings(nextListings);
-        setReports(nextReports);
-      } catch (error) {
-        onToast(error.message || 'Could not load admin data', 'error');
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      active = false;
-    };
-  }, [onToast]);
-
-  const handleDeleteListing = async (id) => {
-    if (!window.confirm('Delete this listing permanently?')) return;
-    try {
-      await adminDeleteListing(id);
-      setListings((prev) => prev.filter((listing) => listing.id !== id));
-      setStats((prev) => (prev ? { ...prev, listings: Math.max(0, prev.listings - 1) } : prev));
-      await onListingsChanged();
-      onToast('Listing deleted', 'success');
-    } catch (error) {
-      onToast(error.message || 'Delete failed', 'error');
-    }
-  };
-
-  const handleToggleDisable = async (user) => {
-    const disabled = !user.disabled;
-    try {
-      await adminUpdateProfile(user.id, { disabled });
-      setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, disabled } : item)));
-      onToast(disabled ? 'User disabled' : 'User enabled', 'success');
-    } catch (error) {
-      onToast(error.message || 'Could not update user', 'error');
-    }
-  };
-
-  const handleResolveReport = async (reportId, status) => {
-    try {
-      await adminUpdateReport(reportId, { status });
-      setReports((prev) => prev.map((report) => (report.id === reportId ? { ...report, status } : report)));
-      onToast(`Report marked ${status}`, 'success');
-    } catch (error) {
-      onToast(error.message || 'Could not update report', 'error');
-    }
-  };
-
-  const handleToggleFeatured = async (listing) => {
-    if (featuredUpdatingIds.has(listing.id)) return;
-    const featured = !listing.featured;
-    setFeaturedUpdatingIds((prev) => new Set(prev).add(listing.id));
-    setAdminActionError('');
-    try {
-      const updatedListing = await adminUpdateListing(listing.id, {
-        featured,
-      });
-      setListings((prev) => prev.map((item) => (item.id === listing.id ? updatedListing : item)));
-      await onListingsChanged();
-      onToast(featured ? 'Listing featured' : 'Listing removed from featured', 'success');
-    } catch (error) {
-      const message = error.message || 'Could not update featured listing';
-      setAdminActionError(message);
-      onToast(message, 'error');
-    } finally {
-      setFeaturedUpdatingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(listing.id);
-        return next;
-      });
-    }
-  };
-
-  const featuredCount = useMemo(() => listings.filter((listing) => listing.featured).length, [listings]);
-  const filteredListings = useMemo(() => {
-    const text = listingSearch.trim().toLowerCase();
-    return listings.filter((listing) => {
-      if (featuredFilter === 'featured' && !listing.featured) return false;
-      if (featuredFilter === 'not_featured' && listing.featured) return false;
-      if (!text) return true;
-      const haystack = [
-        listingTitle(listing),
-        listing.propertyType,
-        listing.listingType,
-        listing.status,
-        listing.country,
-        listing.region,
-        listing.city,
-        listing.area,
-        listing.location,
-        listing.sellerName,
-        listing.sellerEmail,
-      ].filter(Boolean).join(' ').toLowerCase();
-      return haystack.includes(text);
-    });
-  }, [featuredFilter, listingSearch, listings]);
-
-  const tabClass = (value) => `relative flex-1 py-3 text-sm font-medium ${tab === value ? 'text-emerald-300' : 'text-stone-400'}`;
-  const statCard = (label, value, className = 'text-white') => (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className={`text-2xl font-bold ${className}`}>{value}</div>
-      <div className="mt-1 text-xs uppercase tracking-wide text-stone-500">{label}</div>
-    </div>
-  );
-
-  if (loading) {
-    return (
-      <div className="pb-24">
-        <TopBar title="Admin Dashboard" subtitle="Loading marketplace data" />
-        <div className="px-4 pt-8 text-center text-sm text-stone-400">Loading admin data...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="pb-24">
-      <div className="sticky top-0 z-20 border-b border-white/10 bg-stone-950/90 px-4 py-4 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onBack} className="rounded-full border border-white/10 bg-white/5 p-2">
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold">Admin Dashboard</h1>
-            <p className="text-xs text-stone-400">Manage your marketplace</p>
-          </div>
-          <Shield className="h-6 w-6 text-emerald-300" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 px-4 pt-4">
-        {stats ? (
-          <>
-            {statCard('Total Users', stats.users, 'text-emerald-300')}
-            {statCard('Listings', stats.listings)}
-            {statCard('Featured', featuredCount, featuredCount ? 'text-amber-300' : 'text-white')}
-            {statCard('Reports', stats.reports, stats.reports ? 'text-amber-300' : 'text-white')}
-            {statCard('Messages', stats.messages)}
-          </>
-        ) : null}
-      </div>
-
-      <div className="mt-5 grid grid-cols-3 border-b border-white/10">
-        {[
-          ['users', `Users (${users.length})`],
-          ['listings', `Listings (${listings.length})`],
-          ['reports', `Reports (${reports.length})`],
-        ].map(([id, label]) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={tabClass(id)}>
-            {label}
-            {tab === id ? <span className="absolute inset-x-0 bottom-0 h-0.5 bg-emerald-500" /> : null}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'users' ? (
-        <div className="mt-2">
-          {users.length ? users.map((user) => {
-            const admin = isAdminProfile(user);
-            return (
-              <div key={user.id} className="flex items-center gap-3 border-b border-white/5 px-4 py-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/5">
-                  <UserRound className="h-5 w-5 text-stone-400" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{user.name || 'User'}</div>
-                  <div className="truncate text-xs text-stone-400">{user.email}</div>
-                  <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                    <span className="rounded bg-white/8 px-1.5 py-0.5 text-stone-300">{user.role || 'buyer'}</span>
-                    {admin ? <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">Admin</span> : null}
-                    {user.disabled ? <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-red-200">Disabled</span> : null}
-                  </div>
-                </div>
-                {!admin ? (
-                  <button type="button" onClick={() => handleToggleDisable(user)} className={`rounded-xl border px-3 py-2 text-xs ${user.disabled ? 'border-emerald-500/40 text-emerald-200' : 'border-red-500/40 text-red-200'}`}>
-                    {user.disabled ? 'Enable' : 'Disable'}
-                  </button>
-                ) : null}
-              </div>
-            );
-          }) : <EmptyState title="No users yet" text="User accounts will appear here." />}
-        </div>
-      ) : null}
-
-      {tab === 'listings' ? (
-        <div className="mt-2">
-          <div className="space-y-3 border-b border-white/5 px-4 py-3">
-            {adminActionError ? (
-              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs leading-relaxed text-red-100">
-                {adminActionError}
-              </div>
-            ) : null}
-            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-stone-950/60 px-3 py-2">
-              <Search className="h-4 w-4 shrink-0 text-stone-400" />
-              <input
-                value={listingSearch}
-                onChange={(event) => setListingSearch(event.target.value)}
-                placeholder="Search listings, sellers, location"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-stone-500"
-              />
-              {listingSearch ? (
-                <button type="button" onClick={() => setListingSearch('')} className="rounded-lg p-1 text-stone-400">
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
-            <div className="flex gap-2 overflow-x-auto">
-              {[
-                ['all', `All (${listings.length})`],
-                ['featured', `Featured (${featuredCount})`],
-                ['not_featured', `Not featured (${listings.length - featuredCount})`],
-              ].map(([id, label]) => (
-                <button key={id} type="button" onClick={() => setFeaturedFilter(id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium ${featuredFilter === id ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-white/5 text-stone-400'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {filteredListings.length ? filteredListings.map((listing) => (
-            <div key={listing.id} className={`flex items-center gap-3 border-b px-4 py-3 ${listing.featured ? 'border-amber-500/30 bg-amber-500/5' : 'border-white/5'}`}>
-              <div className="h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-white/5">
-                {listing.photos?.[0] ? (
-                  <img src={listing.photos[0]} alt={listingTitle(listing)} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Home className="h-5 w-5 text-stone-600" />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{listingTitle(listing)}</span>
-                  {listing.featured ? <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">Featured</span> : null}
-                </div>
-                <div className="truncate text-xs text-stone-400">{formatPrice(listing.price, listing.currency)} - {listing.location || listing.city || listing.country || 'No location'}</div>
-                <div className="truncate text-xs text-stone-500">Seller: {listing.sellerName || listing.sellerEmail || 'Unknown'}</div>
-                <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                  <span className="rounded bg-white/8 px-1.5 py-0.5 text-stone-300">{listing.status || 'active'}</span>
-                  {listing.createdAt ? <span className="rounded bg-white/8 px-1.5 py-0.5 text-stone-300">{new Date(listing.createdAt).toLocaleDateString()}</span> : null}
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <button type="button" disabled={featuredUpdatingIds.has(listing.id)} onClick={() => handleToggleFeatured(listing)} className={`rounded-lg border px-2 py-1 text-[10px] font-semibold disabled:opacity-50 ${listing.featured ? 'border-amber-500/40 bg-amber-500/20 text-amber-300' : 'border-white/10 bg-white/5 text-stone-400'}`}>
-                  <span className="inline-flex items-center gap-1">
-                    <Star className="h-3 w-3" />
-                    {featuredUpdatingIds.has(listing.id) ? 'Saving' : listing.featured ? 'Unfeature' : 'Feature'}
-                  </span>
-                </button>
-                <button type="button" onClick={() => handleDeleteListing(listing.id)} className="rounded-lg border border-red-500/40 p-2 text-red-200">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )) : <EmptyState title="No listings match" text="Try a different admin search or filter." />}
-        </div>
-      ) : null}
-
-      {tab === 'reports' ? (
-        <div className="mt-2">
-          {reports.length ? reports.map((report) => {
-            const listing = listings.find((item) => item.id === report.listing_id);
-            const reporter = users.find((user) => user.id === report.reporter_id);
-            return (
-              <div key={report.id} className="border-b border-white/5 px-4 py-4">
-                <div className="text-sm font-medium">{listing ? listingTitle(listing) : 'Unknown listing'}</div>
-                <div className="mt-1 text-xs text-stone-400">Reported by: {reporter?.name || reporter?.email || 'Unknown'}</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-1 text-amber-200">{report.reason || 'Report'}</span>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-stone-300">{report.status || 'pending'}</span>
-                </div>
-                {report.status === 'pending' || !report.status ? (
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <button type="button" onClick={() => handleResolveReport(report.id, 'resolved')} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-stone-950">Resolve</button>
-                    <button type="button" onClick={() => handleResolveReport(report.id, 'dismissed')} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-stone-300">Dismiss</button>
-                    {listing ? <button type="button" onClick={() => { handleDeleteListing(listing.id); handleResolveReport(report.id, 'resolved'); }} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white">Delete</button> : null}
-                  </div>
-                ) : null}
-              </div>
-            );
-          }) : <EmptyState title="No reports yet" text="Reported listings will appear here." />}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, savedCount, unreadMessages, themeMode, onThemeChange, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin, onNavigate, onUpdateListingStatus }) {
   const [name, setName] = useState(currentProfile?.name || '');
   const [phone, setPhone] = useState(currentProfile?.phone || '');
@@ -2598,7 +1713,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
   const activeListings = myListings.filter((listing) => (listing.status || 'active') === 'active').length;
   const statItems = [
     ['My Listings', myListings.length],
-    ['Active', activeListings],
+    ['Live', activeListings],
     ['Saved', savedCount],
     ['Unread', unreadMessages],
   ];
@@ -2685,7 +1800,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                 </div>
               ) : null}
 
-              {isAdminProfile(currentProfile, currentUserEmail) ? (
+              {isAdminProfile(currentProfile) ? (
                 <SectionButton section="admin" icon={Shield} label="Admin Dashboard" detail="Manage users, listings, and reports" onClick={onOpenAdmin} />
               ) : null}
 
@@ -2859,15 +1974,6 @@ function ToggleField({ label, checked, onChange }) {
   );
 }
 
-function toForm(listing) {
-  return {
-    ...INITIAL_FORM,
-    ...listing,
-    photos: listing.photos || [],
-    features: listing.features || [],
-  };
-}
-
 export default function App() {
   const { toast, show, clear } = useToast();
   const [themeMode, setThemeMode] = useState(() => {
@@ -2877,8 +1983,9 @@ export default function App() {
   const [tab, setTab] = useState('discover');
   const [listings, setListings] = useState([]);
   const [myListingRows, setMyListingRows] = useState([]);
-  const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const initialShopState = useMemo(() => readSessionJson(SHOP_STATE_STORAGE_KEY, null), []);
+  const [query, setQuery] = useState(() => initialShopState?.query || '');
+  const [filters, setFilters] = useState(() => ({ ...INITIAL_FILTERS, ...(initialShopState?.filters || {}) }));
   const [currentUserId, setCurrentUserId] = useState(null);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [currentProfile, setCurrentProfile] = useState(null);
@@ -2889,8 +1996,9 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingListing, setEditingListing] = useState(null);
   const [adminOpen, setAdminOpen] = useState(false);
-  const [resultsOpen, setResultsOpen] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(() => Boolean(initialShopState?.resultsOpen));
   const [selectedThreadId, setSelectedThreadId] = useState(null);
+  const tabScrollRef = useRef(readSessionJson(TAB_SCROLL_STORAGE_KEY, {}));
   const [readAtByThread, setReadAtByThread] = useState(() => {
     try {
       return JSON.parse(window.localStorage.getItem('melaHomesThreadReads') || '{}');
@@ -2901,6 +2009,8 @@ export default function App() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingDeleteListing, setPendingDeleteListing] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [bootError, setBootError] = useState('');
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   const refreshListings = async () => {
     const [data, mine] = await Promise.all([
@@ -2940,6 +2050,61 @@ export default function App() {
     setMyListingRows(mine);
   };
 
+  const captureTabScroll = () => {
+    if (typeof window === 'undefined') return;
+    tabScrollRef.current = {
+      ...tabScrollRef.current,
+      [tab]: window.scrollY,
+    };
+    writeSessionJson(TAB_SCROLL_STORAGE_KEY, tabScrollRef.current);
+  };
+
+  const navigateTab = (nextTab, { closeShopResults = false } = {}) => {
+    captureTabScroll();
+    setAdminOpen(false);
+    setTab(nextTab);
+    if (nextTab !== 'sell') setEditingListing(null);
+    if (closeShopResults) setResultsOpen(false);
+  };
+
+  const openListing = (listing) => {
+    captureTabScroll();
+    setSelectedListing(listing);
+  };
+
+  const openAdmin = () => {
+    captureTabScroll();
+    setAdminOpen(true);
+  };
+
+  useEffect(() => {
+    writeSessionJson(SHOP_STATE_STORAGE_KEY, {
+      query,
+      filters,
+      resultsOpen,
+    });
+  }, [filters, query, resultsOpen]);
+
+  useEffect(() => {
+    const saveCurrentScroll = () => captureTabScroll();
+    window.addEventListener('pagehide', saveCurrentScroll);
+    window.addEventListener('beforeunload', saveCurrentScroll);
+    return () => {
+      saveCurrentScroll();
+      window.removeEventListener('pagehide', saveCurrentScroll);
+      window.removeEventListener('beforeunload', saveCurrentScroll);
+    };
+  }, [tab]);
+
+  useLayoutEffect(() => {
+    if (selectedListing || adminOpen) return undefined;
+    const savedScroll = tabScrollRef.current[tab] || 0;
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: savedScroll, left: 0, behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [adminOpen, selectedListing, tab]);
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', themeMode === 'dark');
     document.documentElement.classList.toggle('theme-dark', themeMode === 'dark');
@@ -2950,17 +2115,30 @@ export default function App() {
   useEffect(() => {
     let active = true;
     const boot = async () => {
+      setLoading(true);
+      setBootError('');
       try {
-        const user = await getCurrentUser();
+        const user = await withTimeout(
+          getCurrentUser(),
+          'Loading is taking too long. Please check your connection and try again.',
+        );
         const userId = user?.id || null;
-        const data = await loadListings();
+        const data = await withTimeout(
+          loadListings(),
+          'Listings are taking too long to load. Please try again.',
+        );
         if (!active) return;
         setListings(data);
         setCurrentUserId(userId);
         setCurrentUserEmail(user?.email || '');
-        await refreshProfile(userId);
+        await withTimeout(
+          refreshProfile(userId),
+          'Your account is taking too long to load. Please try again.',
+        );
       } catch (error) {
-        show(error.message || 'Could not load app', 'error');
+        const message = error.message || 'Could not load app';
+        if (active) setBootError(message);
+        show(message, 'error');
       } finally {
         if (active) setLoading(false);
       }
@@ -2980,18 +2158,17 @@ export default function App() {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [bootAttempt]);
 
   useEffect(() => {
     const handleNavigate = (event) => {
       if (typeof event.detail !== 'string') return;
-      setResultsOpen(false);
       setSelectedListing(null);
-      setTab(event.detail);
+      navigateTab(event.detail);
     };
     window.addEventListener('mela:navigate', handleNavigate);
     return () => window.removeEventListener('mela:navigate', handleNavigate);
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -3052,7 +2229,7 @@ export default function App() {
   };
 
   const myListings = useMemo(() => myListingRows.filter((listing) => currentUserId && listing.sellerId === currentUserId), [currentUserId, myListingRows]);
-  const isAdmin = isAdminProfile(currentProfile, currentUserEmail);
+  const isAdmin = isAdminProfile(currentProfile);
 
   const handleToggleSave = async (listingId) => {
     if (!currentUserId) {
@@ -3108,8 +2285,7 @@ export default function App() {
       const thread = await startThreadForListing(listing);
       setSelectedThreadId(thread.id);
       setSelectedListing(null);
-      setResultsOpen(false);
-      setTab('messages');
+      navigateTab('messages');
     } catch (error) {
       show(error.message || 'Could not start message', 'error');
     }
@@ -3143,7 +2319,7 @@ export default function App() {
           onEdit={() => {
             setEditingListing(selectedListing);
             setSelectedListing(null);
-            setTab('sell');
+            navigateTab('sell');
           }}
           onDelete={() => requestDeleteListing(selectedListing)}
         />
@@ -3159,7 +2335,7 @@ export default function App() {
           filters={filters}
           setFilters={setFilters}
           savedIds={savedIds}
-          onOpenListing={setSelectedListing}
+          onOpenListing={openListing}
           onToggleSave={handleToggleSave}
           onOpenFilters={() => setFiltersOpen(true)}
           onMessage={handleStartMessage}
@@ -3174,7 +2350,7 @@ export default function App() {
         <SavedScreen
           listings={listings}
           savedIds={savedIds}
-          onOpenListing={setSelectedListing}
+          onOpenListing={openListing}
           onToggleSave={handleToggleSave}
           requireAuth={Boolean(currentUserId)}
         />
@@ -3190,10 +2366,9 @@ export default function App() {
           onSelectThread={setSelectedThreadId}
           onThreadRead={markThreadLocallyRead}
           onOpenAuth={() => openAuth('signin')}
-          onOpenListing={setSelectedListing}
+          onOpenListing={openListing}
           onBrowseHomes={() => {
-            setResultsOpen(false);
-            setTab('discover');
+            navigateTab('discover', { closeShopResults: true });
           }}
           onToast={show}
         />
@@ -3212,13 +2387,13 @@ export default function App() {
           onCreated={async () => {
             await refreshListings();
             show('Listing published', 'success');
-            setTab('account');
+            navigateTab('account');
           }}
           onSaved={async () => {
             await refreshListings();
             setEditingListing(null);
             show('Listing updated', 'success');
-            setTab('account');
+            navigateTab('account');
           }}
         />
       );
@@ -3234,23 +2409,20 @@ export default function App() {
         unreadMessages={unreadMessages}
         themeMode={themeMode}
         onThemeChange={setThemeMode}
-        onOpenListing={setSelectedListing}
+        onOpenListing={openListing}
         onDeleteListing={requestDeleteListing}
         onStartEdit={(listing) => {
           setEditingListing(listing);
-          setTab('sell');
+          navigateTab('sell');
         }}
         onOpenAuth={() => openAuth('signin')}
         onProfileSaved={async () => {
           await refreshProfile(currentUserId);
           show('Profile saved', 'success');
         }}
-        onOpenAdmin={() => setAdminOpen(true)}
+        onOpenAdmin={openAdmin}
         onNavigate={(nextTab) => {
-          setAdminOpen(false);
-          setEditingListing(null);
-          setResultsOpen(false);
-          setTab(nextTab);
+          navigateTab(nextTab);
         }}
         onUpdateListingStatus={handleUpdateListingStatus}
         onSignOut={async () => {
@@ -3272,11 +2444,32 @@ export default function App() {
   return (
     <Shell themeMode={themeMode}>
       {loading ? (
-        <div className="flex min-h-screen items-center justify-center text-sm text-stone-400">Loading marketplace...</div>
+        <div className="flex min-h-screen items-center justify-center px-6">
+          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-6 text-center">
+            <div className="mx-auto h-12 w-12 animate-pulse rounded-2xl bg-emerald-500/20" />
+            <h2 className="mt-4 text-lg font-semibold text-stone-100">Loading marketplace</h2>
+            <p className="mt-2 text-sm text-stone-400">Fetching listings and your account data.</p>
+          </div>
+        </div>
       ) : (
         <>
+          {bootError ? (
+            <div className="px-4 pt-6">
+              <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-5 text-center">
+                <h2 className="text-lg font-semibold text-amber-100">Could not finish loading</h2>
+                <p className="mt-2 text-sm text-amber-50/80">{bootError}</p>
+                <button
+                  type="button"
+                  onClick={() => setBootAttempt((value) => value + 1)}
+                  className="mt-4 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          ) : null}
           {content()}
-          {!selectedListing && !adminOpen ? <TabBar tab={tab} onChange={(nextTab) => { setAdminOpen(false); setTab(nextTab); if (nextTab !== 'sell') setEditingListing(null); if (nextTab !== 'discover') setResultsOpen(false); }} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
+          {!selectedListing && !adminOpen ? <TabBar tab={tab} onChange={(nextTab) => navigateTab(nextTab)} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
         </>
       )}
 
