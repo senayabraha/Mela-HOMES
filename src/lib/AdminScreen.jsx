@@ -45,15 +45,17 @@ export function AdminScreen({ onBack, onToast, onListingsChanged }) {
   }, [onToast]);
 
   const handleDeleteListing = async (id) => {
-    if (!window.confirm('Delete this listing permanently?')) return;
+    if (!window.confirm('Delete this listing permanently?')) return false;
     try {
       await adminDeleteListing(id);
       setListings((prev) => prev.filter((listing) => listing.id !== id));
       setStats((prev) => (prev ? { ...prev, listings: Math.max(0, prev.listings - 1) } : prev));
       await onListingsChanged();
       onToast('Listing deleted', 'success');
+      return true;
     } catch (error) {
       onToast(error.message || 'Delete failed', 'error');
+      return false;
     }
   };
 
@@ -99,6 +101,11 @@ export function AdminScreen({ onBack, onToast, onListingsChanged }) {
         return next;
       });
     }
+  };
+
+  const handleDeleteReportedListing = async (reportId, listingId) => {
+    const deleted = await handleDeleteListing(listingId);
+    if (deleted) await handleResolveReport(reportId, 'resolved');
   };
 
   const featuredCount = useMemo(() => listings.filter((listing) => listing.featured).length, [listings]);
@@ -301,7 +308,7 @@ export function AdminScreen({ onBack, onToast, onListingsChanged }) {
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     <button type="button" onClick={() => handleResolveReport(report.id, 'resolved')} className="rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-stone-950">Resolve</button>
                     <button type="button" onClick={() => handleResolveReport(report.id, 'dismissed')} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-stone-300">Dismiss</button>
-                    {listing ? <button type="button" onClick={() => { handleDeleteListing(listing.id); handleResolveReport(report.id, 'resolved'); }} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white">Delete</button> : null}
+                    {listing ? <button type="button" onClick={() => handleDeleteReportedListing(report.id, listing.id)} className="rounded-xl bg-red-600 px-3 py-2 text-xs font-semibold text-white">Delete</button> : null}
                   </div>
                 ) : null}
               </div>

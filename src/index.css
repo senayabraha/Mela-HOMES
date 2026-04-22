@@ -13,6 +13,12 @@
   --app-overlay: rgba(0, 0, 0, 0.7);
 }
 
+button,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .theme-light {
   color-scheme: light;
   --app-bg: #f8fafc;
@@ -23,6 +29,11 @@
   --app-text-muted: #64748b;
   --app-border: #e5e7eb;
   --app-overlay: rgba(15, 23, 42, 0.35);
+  --app-emerald: #047857;
+  --app-emerald-strong: #065f46;
+  --app-emerald-soft: #d1fae5;
+  --app-emerald-soft-border: #34d399;
+  --app-warning-soft: #fef3c7;
 }
 
 .theme-light .bg-black,
@@ -60,10 +71,61 @@
   background-color: rgba(255, 255, 255, 0.82) !important;
 }
 
+.theme-light .bg-emerald-50 {
+  background-color: #ecfdf5 !important;
+}
+
+.theme-light .bg-emerald-500\/10,
+.theme-light .bg-emerald-500\/15,
+.theme-light .bg-emerald-400\/15 {
+  background-color: var(--app-emerald-soft) !important;
+}
+
+.theme-light .bg-amber-500\/5,
+.theme-light .bg-amber-500\/10,
+.theme-light .bg-amber-500\/15,
+.theme-light .bg-amber-500\/20,
+.theme-light .bg-yellow-500\/10,
+.theme-light .bg-yellow-500\/15,
+.theme-light .bg-yellow-400\/15 {
+  background-color: var(--app-warning-soft) !important;
+}
+
 .theme-light .bg-black\/60,
 .theme-light .bg-black\/70,
 .theme-light .bg-black\/80 {
   background-color: var(--app-overlay) !important;
+}
+
+.theme-light .bg-black\/35,
+.theme-light .bg-black\/60,
+.theme-light .bg-black\/70,
+.theme-light .bg-black\/80,
+.theme-light .bg-stone-950\/70,
+.theme-light .bg-stone-950\/75,
+.theme-light .bg-neutral-950\/70 {
+  color: #ffffff !important;
+}
+
+.theme-light .bg-black\/35 *,
+.theme-light .bg-black\/60 *,
+.theme-light .bg-black\/70 *,
+.theme-light .bg-black\/80 *,
+.theme-light .bg-stone-950\/70 *,
+.theme-light .bg-stone-950\/75 *,
+.theme-light .bg-neutral-950\/70 * {
+  color: #ffffff !important;
+}
+
+.theme-light .bg-black\/35 svg,
+.theme-light .bg-black\/60 svg,
+.theme-light .bg-black\/70 svg,
+.theme-light .bg-black\/80 svg,
+.theme-light .bg-stone-950\/70 svg,
+.theme-light .bg-stone-950\/75 svg,
+.theme-light .bg-neutral-950\/70 svg {
+  color: #ffffff !important;
+  stroke: currentColor !important;
 }
 
 .theme-light [class~="bg-[#111216]"],
@@ -102,13 +164,42 @@
   color: var(--app-text) !important;
 }
 
-.theme-light .bg-emerald-500 .text-stone-950,
-.theme-light .bg-emerald-600 .text-stone-950,
-.theme-light .bg-emerald-700 .text-stone-950,
-.theme-light .bg-emerald-500.text-stone-950,
-.theme-light .bg-emerald-600.text-stone-950,
-.theme-light .bg-emerald-700.text-stone-950 {
-  color: #052e16 !important;
+.theme-light .text-emerald-100,
+.theme-light .text-emerald-200,
+.theme-light .text-emerald-300,
+.theme-light .text-emerald-400,
+.theme-light .text-emerald-500,
+.theme-light .text-emerald-600,
+.theme-light .text-emerald-700 {
+  color: var(--app-emerald-strong) !important;
+}
+
+.theme-light .text-emerald-950 {
+  color: #064e3b !important;
+}
+
+.theme-light .text-amber-50,
+.theme-light .text-amber-50\/80,
+.theme-light .text-amber-100,
+.theme-light .text-amber-200,
+.theme-light .text-amber-300,
+.theme-light .text-amber-400,
+.theme-light .text-yellow-100,
+.theme-light .text-yellow-200,
+.theme-light .text-yellow-300,
+.theme-light .text-yellow-400 {
+  color: var(--app-text) !important;
+}
+
+.theme-light .fill-emerald-500 {
+  fill: var(--app-emerald) !important;
+}
+
+.theme-light .border-emerald-400,
+.theme-light .border-emerald-500,
+.theme-light .border-emerald-500\/30,
+.theme-light .border-emerald-500\/40 {
+  border-color: var(--app-emerald) !important;
 }
 
 .theme-light .border-white\/10,
@@ -164,9 +255,146 @@
 
 .theme-light .bg-emerald-500,
 .theme-light .bg-emerald-600,
-.theme-light .bg-emerald-700,
-.theme-light .bg-red-600 {
+.theme-light .bg-emerald-700 {
+  background-color: var(--app-emerald-strong) !important;
   color: #ffffff !important;
+}
+
+.theme-light .bg-red-600 {
+  background-color: #dc2626 !important;
+  color: #ffffff !important;
+}
+
+.theme-light .bg-emerald-500.text-stone-950,
+.theme-light .bg-emerald-600.text-stone-950,
+.theme-light .bg-emerald-700.text-stone-950,
+.theme-light .bg-emerald-500 .text-stone-950,
+.theme-light .bg-emerald-600 .text-stone-950,
+.theme-light .bg-emerald-700 .text-stone-950,
+.theme-light .bg-emerald-500.text-white,
+.theme-light .bg-emerald-600.text-white,
+.theme-light .bg-emerald-700.text-white,
+.theme-light .bg-red-600.text-white {
+  color: #ffffff !important;
+}
+
+.theme-light .bg-emerald-50.text-emerald-950 {
+  color: #064e3b !important;
+}
+
+.theme-light button.bg-white\/5,
+.theme-light button.bg-white\/8,
+.theme-light button.bg-white\/10,
+.theme-light button.bg-white\/12 {
+  color: var(--app-text) !important;
+}
+
+.theme-light button.bg-emerald-500\/15,
+.theme-light button.bg-emerald-400\/15,
+.theme-light .border-emerald-400.bg-emerald-400\/15,
+.theme-light .border-emerald-500.bg-emerald-500\/15 {
+  color: var(--app-text) !important;
+}
+
+.theme-light .fixed.inset-x-0.bottom-0 .bg-emerald-500\/15 {
+  background-color: #bbf7d0 !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .bg-emerald-50,
+.theme-light .bg-emerald-500\/10,
+.theme-light .bg-emerald-500\/15,
+.theme-light .bg-emerald-500\/20,
+.theme-light .bg-emerald-400\/15,
+.theme-light .bg-amber-500\/5,
+.theme-light .bg-amber-500\/10,
+.theme-light .bg-amber-500\/15,
+.theme-light .bg-amber-500\/20,
+.theme-light .bg-yellow-500\/10,
+.theme-light .bg-yellow-500\/15,
+.theme-light .bg-yellow-400\/15 {
+  color: var(--app-text) !important;
+}
+
+.theme-light .bg-emerald-50 *,
+.theme-light .bg-emerald-500\/10 *,
+.theme-light .bg-emerald-500\/15 *,
+.theme-light .bg-emerald-500\/20 *,
+.theme-light .bg-emerald-400\/15 *,
+.theme-light .bg-amber-500\/5 *,
+.theme-light .bg-amber-500\/10 *,
+.theme-light .bg-amber-500\/15 *,
+.theme-light .bg-amber-500\/20 *,
+.theme-light .bg-yellow-500\/10 *,
+.theme-light .bg-yellow-500\/15 *,
+.theme-light .bg-yellow-400\/15 * {
+  color: var(--app-text) !important;
+}
+
+.theme-light .bg-emerald-50 svg,
+.theme-light .bg-emerald-500\/10 svg,
+.theme-light .bg-emerald-500\/15 svg,
+.theme-light .bg-emerald-500\/20 svg,
+.theme-light .bg-emerald-400\/15 svg,
+.theme-light .bg-amber-500\/5 svg,
+.theme-light .bg-amber-500\/10 svg,
+.theme-light .bg-amber-500\/15 svg,
+.theme-light .bg-amber-500\/20 svg,
+.theme-light .bg-yellow-500\/10 svg,
+.theme-light .bg-yellow-500\/15 svg,
+.theme-light .bg-yellow-400\/15 svg {
+  color: var(--app-text) !important;
+  stroke: currentColor !important;
+}
+
+.theme-light .bg-black\/35,
+.theme-light .bg-black\/60,
+.theme-light .bg-black\/70,
+.theme-light .bg-black\/80,
+.theme-light .bg-stone-950\/75,
+.theme-light .bg-neutral-800 {
+  color: #ffffff !important;
+}
+
+.theme-light .bg-black\/35 *,
+.theme-light .bg-black\/60 *,
+.theme-light .bg-black\/70 *,
+.theme-light .bg-black\/80 *,
+.theme-light .bg-stone-950\/75 *,
+.theme-light .bg-neutral-800 * {
+  color: #ffffff !important;
+}
+
+.theme-light .bg-black\/35 svg,
+.theme-light .bg-black\/60 svg,
+.theme-light .bg-black\/70 svg,
+.theme-light .bg-black\/80 svg,
+.theme-light .bg-stone-950\/75 svg,
+.theme-light .bg-neutral-800 svg {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+.theme-light .result-listing-card {
+  background-color: var(--app-surface) !important;
+  color: var(--app-text) !important;
+}
+
+.theme-light .result-listing-details,
+.theme-light .result-listing-details * {
+  color: var(--app-text) !important;
+}
+
+.theme-light .result-listing-details .bg-emerald-600,
+.theme-light .result-listing-details .bg-emerald-600 *,
+.theme-light .result-listing-details .bg-emerald-500,
+.theme-light .result-listing-details .bg-emerald-500 * {
+  color: #ffffff !important;
+}
+
+.theme-light .result-listing-details .bg-emerald-50,
+.theme-light .result-listing-details .bg-emerald-50 * {
+  color: var(--app-text) !important;
 }
 
 .no-scrollbar::-webkit-scrollbar {

@@ -115,8 +115,9 @@ export async function toggleSaved(listingId, currentlySaved) {
 export async function uploadPhoto(file) {
   const userId = await uid();
   if (!userId) throw new Error('You must be signed in to upload photos.');
-  const ext = file.name.split('.').pop();
-  const path = `${userId}/${Date.now()}.${ext}`;
+  const ext = file.name.split('.').pop() || 'jpg';
+  const randomId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const path = `${userId}/${Date.now()}-${randomId}.${ext}`;
   const { error } = await supabase.storage
     .from('listing-photos')
     .upload(path, file, { cacheControl: '3600', upsert: false });
@@ -277,6 +278,12 @@ export async function getCurrentUserId() {
 export async function signInWithEmail(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
+  const profile = await getCurrentProfile(data.user.id);
+  if (profile?.disabled) {
+    _cachedUser = null;
+    await supabase.auth.signOut();
+    throw new Error('This account has been disabled. Contact support for help.');
+  }
   return data.user;
 }
 

@@ -14,7 +14,6 @@ import {
   Map,
   MapPin,
   MessageCircle,
-  Navigation,
   Palette,
   Pencil,
   PlusSquare,
@@ -132,6 +131,54 @@ function writeSessionJson(key, value) {
   }
 }
 
+function InstantButton({ children, className = '', onPress, onClick, type = 'button', disabled = false, ...props }) {
+  const ignoreNextClickRef = useRef(false);
+  const touchStartRef = useRef(null);
+  const press = onPress || onClick;
+
+  const handlePointerDown = (event) => {
+    if (event.pointerType === 'mouse') return;
+    touchStartRef.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const handlePointerUp = (event) => {
+    if (disabled || event.pointerType === 'mouse') return;
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    if (start && (Math.abs(event.clientX - start.x) > 10 || Math.abs(event.clientY - start.y) > 10)) {
+      return;
+    }
+    ignoreNextClickRef.current = true;
+    event.preventDefault();
+    press?.(event);
+  };
+
+  const handleClick = (event) => {
+    if (ignoreNextClickRef.current) {
+      ignoreNextClickRef.current = false;
+      return;
+    }
+    press?.(event);
+  };
+
+  return (
+    <button
+      {...props}
+      type={type}
+      disabled={disabled}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={() => {
+        touchStartRef.current = null;
+      }}
+      onClick={handleClick}
+      className={`touch-manipulation ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function scheduleSessionJson(key, value) {
   if (typeof window === 'undefined') return;
   const save = () => writeSessionJson(key, value);
@@ -232,10 +279,9 @@ function TabBar({ tab, onChange, unreadSaved, unreadMessages }) {
         {items.map(([key, Icon, label]) => {
           const active = tab === key;
           return (
-            <button
+            <InstantButton
               key={key}
-              type="button"
-              onClick={() => onChange(key)}
+              onPress={() => onChange(key)}
               className={`relative flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-xs ${active ? 'bg-emerald-500/15 text-emerald-300' : 'text-stone-400'}`}
             >
               <Icon className="h-5 w-5" />
@@ -250,7 +296,7 @@ function TabBar({ tab, onChange, unreadSaved, unreadMessages }) {
                   {unreadMessages > 9 ? '9+' : unreadMessages}
                 </span>
               ) : null}
-            </button>
+            </InstantButton>
           );
         })}
       </div>
@@ -416,9 +462,9 @@ function EmptyState({ title, text, action, onAction }) {
       <h3 className="text-base font-semibold">{title}</h3>
       <p className="mt-2 text-sm text-stone-400">{text}</p>
       {action ? (
-        <button type="button" onClick={onAction} className="mt-4 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-medium text-stone-950">
+        <InstantButton onPress={onAction} className="mt-4 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-medium text-stone-950">
           {action}
-        </button>
+        </InstantButton>
       ) : null}
     </div>
   );
@@ -560,8 +606,29 @@ function Stat({ icon: Icon, label }) {
 }
 
 function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) {
+  const handleShare = async () => {
+    const title = listingTitle(listing);
+    const location = listingLocation(listing);
+    const text = `${title} - ${formatPrice(listing.price, listing.currency)}${location ? ` in ${location}` : ''}`;
+    const url = window.location.href;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+    } catch {
+      // Sharing can be canceled by the user.
+    }
+  };
+
+  const handleCall = () => {
+    if (!listing.sellerPhone) return;
+    window.location.href = `tel:${listing.sellerPhone}`;
+  };
+
   return (
-    <div className="bg-[#111216]">
+    <div className="result-listing-card bg-[#111216]">
       <button type="button" onClick={() => onOpen(listing)} className="block w-full text-left">
         <div className="relative h-[220px] bg-neutral-800">
           {listing.photoUrl ? (
@@ -571,38 +638,30 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
               <Home className="h-20 w-20 text-black/20" />
             </div>
           )}
-          {listing.listingType === 'For Rent' ? (
-            <div className="absolute left-3 top-3 rounded-full bg-emerald-300 px-3 py-1.5 text-xs font-bold text-emerald-950">
-              1 Month Free
-            </div>
-          ) : null}
-          <div className="absolute right-3 top-3 rounded-lg bg-[#111216] px-3 py-2 text-xs font-bold text-emerald-300">
-            3D Tour
-          </div>
           <div className="absolute right-0 top-1/2 flex h-16 w-10 -translate-y-1/2 items-center justify-center rounded-l-full bg-black/35 text-white">
             <ChevronRight className="h-7 w-7" />
           </div>
         </div>
       </button>
-      <div className="p-4">
+      <div className="result-listing-details p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-xl font-bold tracking-wide text-stone-100">
               {listing.listingType === 'For Rent' ? `${formatPrice(listing.price, listing.currency)}+` : formatPrice(listing.price, listing.currency)}
             </div>
             <div className="mt-2 text-sm tracking-wide text-stone-200">
-              {listing.location || listingLocation(listing) || 'Map Location'}
+              {listing.location || listingLocation(listing) || 'Location not set'}
             </div>
             <div className="mt-1.5 text-sm tracking-wide text-stone-200">
               {listing.bedrooms || 0} Bd {listing.listingType === 'For Rent' ? `${formatPrice(listing.price, listing.currency)}+` : `${listing.bathrooms || 0} Ba`}
             </div>
             <div className="mt-1.5 text-sm tracking-wide text-stone-200">{listingTitle(listing)}</div>
             <div className="mt-1.5 text-sm tracking-wide text-stone-200">
-              {listing.listingType === 'For Rent' ? '4 Units Available' : `${listing.sizeSqm || 'Any'} sqm`}
+              {listing.sizeSqm ? `${listing.sizeSqm} sqm` : listing.propertyType}
             </div>
           </div>
           <div className="flex gap-2 pt-1">
-            <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/12 text-stone-100">
+            <button type="button" onClick={handleShare} className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/12 text-stone-100" aria-label="Share listing">
               <Share2 className="h-4 w-4" />
             </button>
             <button
@@ -615,7 +674,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
           </div>
         </div>
         <div className="mt-5 grid grid-cols-[0.75fr_2.5fr] gap-3">
-          <button type="button" className="h-11 rounded-full bg-emerald-50 text-sm font-bold text-emerald-950">
+          <button type="button" onClick={handleCall} disabled={!listing.sellerPhone} className="h-11 rounded-full bg-emerald-50 text-sm font-bold text-emerald-950 disabled:opacity-50">
             Call
           </button>
           <button type="button" onClick={() => onMessage(listing)} className="h-11 rounded-full bg-emerald-600 text-sm font-bold text-white">
@@ -641,23 +700,19 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Map Location"
+              placeholder="Search location or listing"
               className="w-full bg-transparent text-sm tracking-wide text-stone-100 outline-none placeholder:text-stone-300"
             />
           </label>
-          <Navigation className="h-5 w-5 text-emerald-300" />
         </div>
         <div className="mt-4 px-4">
-          <div className="flex items-center justify-between pb-2">
+          <div className="flex items-center justify-between gap-2 pb-2">
             <button
               type="button"
               onClick={onOpenFilters}
               className="h-8 rounded-md border-2 border-emerald-500 px-4 text-xs font-bold tracking-wide text-emerald-300"
             >
               Filters{activeFilters ? ` ${activeFilters}` : ''}
-            </button>
-            <button type="button" className="h-8 rounded-md bg-emerald-600 px-4 text-xs font-bold tracking-wide text-white">
-              Save Search
             </button>
           </div>
         </div>
@@ -952,11 +1007,8 @@ function FiltersPanel({ filters, setFilters, onClose, totalResults }) {
           )}
         </div>
 
-        <div className="fixed bottom-0 left-0 right-0 mx-auto grid max-w-md grid-cols-2 gap-3 bg-[#17181b]/95 px-4 py-3 backdrop-blur">
-          <button type="button" className="h-11 rounded-lg bg-emerald-50 text-sm font-bold tracking-wide text-emerald-950">
-            Save Search
-          </button>
-          <button type="button" onClick={onClose} className="h-11 rounded-lg bg-emerald-700 text-sm font-bold tracking-wide text-white">
+        <div className="fixed bottom-0 left-0 right-0 mx-auto max-w-md bg-[#17181b]/95 px-4 py-3 backdrop-blur">
+          <button type="button" onClick={onClose} className="h-11 w-full rounded-lg bg-emerald-700 text-sm font-bold tracking-wide text-white">
             Show {totalResults} homes
           </button>
         </div>
@@ -1078,7 +1130,6 @@ function RentFilters({ filters, update, toggleProperty, toggleFeature }) {
       <FilterRow label="Unit Amenities" value="All" />
       <FilterRow label="Building Amenities" value="All" />
       <SwitchRow label="Furnished" active={filters.furnished === 'Furnished'} onClick={() => update('furnished', filters.furnished === 'Furnished' ? null : 'Furnished')} />
-      <SwitchRow label="Income Restricted" active={false} onClick={() => {}} />
       <FilterSectionTitle>Property Details</FilterSectionTitle>
       <FilterRow label="Square Feet" />
       <div className="border-t border-white/10 px-4 py-4">
@@ -1266,70 +1317,6 @@ function EnhancedSaleFilters({ filters, update, toggleProperty, toggleFeature, t
         <SwitchRow key={feature} label={feature} active={(filters.features || []).includes(feature)} onClick={() => toggleFeature(feature)} />
       ))}
     </>
-  );
-}
-
-function AgentsScreen({ listings, onOpenListing }) {
-  const agents = useMemo(() => {
-    const grouped = new Map();
-    listings.forEach((listing) => {
-      const key = listing.sellerId || listing.sellerName || 'seller';
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          id: key,
-          name: listing.sellerName || 'Property agent',
-          phone: listing.sellerPhone,
-          email: listing.sellerEmail,
-          listings: [],
-        });
-      }
-      grouped.get(key).listings.push(listing);
-    });
-    return [...grouped.values()].sort((a, b) => b.listings.length - a.listings.length);
-  }, [listings]);
-
-  return (
-    <div className="pb-24">
-      <TopBar title="Agents" subtitle="Browse sellers and property agents" />
-      <div className="space-y-4 px-4 pt-4">
-        {agents.length ? (
-          agents.map((agent) => (
-            <div key={agent.id} className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300">
-                    <Store className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">{agent.name}</h3>
-                    <p className="text-sm text-stone-400">{agent.listings.length} listing{agent.listings.length === 1 ? '' : 's'}</p>
-                  </div>
-                </div>
-                {agent.phone ? <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-stone-300">{agent.phone}</span> : null}
-              </div>
-              <div className="mt-4 space-y-2">
-                {agent.listings.slice(0, 3).map((listing) => (
-                  <button
-                    key={listing.id}
-                    type="button"
-                    onClick={() => onOpenListing(listing)}
-                    className="flex w-full items-center justify-between rounded-2xl bg-stone-950/40 px-3 py-3 text-left"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-white">{listingTitle(listing)}</div>
-                      <div className="mt-0.5 text-xs text-stone-400">{formatPrice(listing.price, listing.currency)} · {listing.listingType}</div>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-stone-500" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))
-        ) : (
-          <EmptyState title="No agents yet" text="Agents and sellers will appear here after properties are listed." />
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -1727,16 +1714,15 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
     ['Saved', savedCount],
     ['Unread', unreadMessages],
   ];
-  const tapClass = 'touch-manipulation select-none';
+  const tapClass = 'select-none';
 
   const toggleSection = (section) => setOpenSection((current) => (current === section ? null : section));
 
   const SectionButton = ({ section, icon: Icon, label, detail, onClick }) => {
     const expanded = openSection === section;
     return (
-      <button
-        type="button"
-        onClick={onClick || (() => toggleSection(section))}
+      <InstantButton
+        onPress={onClick || (() => toggleSection(section))}
         className={`flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left active:bg-white/10 ${tapClass}`}
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-stone-950/50 text-emerald-300">
@@ -1747,20 +1733,19 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
           {detail ? <div className="mt-0.5 truncate text-xs text-stone-400">{detail}</div> : null}
         </div>
         {onClick ? <ChevronRight className="h-5 w-5 text-stone-500" /> : expanded ? <ChevronUp className="h-5 w-5 text-stone-500" /> : <ChevronDown className="h-5 w-5 text-stone-500" />}
-      </button>
+      </InstantButton>
     );
   };
 
   const ThemeButton = ({ value, label }) => {
     const active = themeMode === value;
     return (
-      <button
-        type="button"
-        onClick={() => onThemeChange(value)}
+      <InstantButton
+        onPress={() => onThemeChange(value)}
         className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold ${tapClass} ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}
       >
         {label}
-      </button>
+      </InstantButton>
     );
   };
 
@@ -1808,15 +1793,15 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => onNavigate('sell')} className={`rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-semibold text-stone-950 ${tapClass}`}>
+              <InstantButton onPress={() => onNavigate('sell')} className={`rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-semibold text-stone-950 ${tapClass}`}>
                 Post listing
-              </button>
-              <button type="button" onClick={() => onNavigate('saved')} className={`rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200 ${tapClass}`}>
+              </InstantButton>
+              <InstantButton onPress={() => onNavigate('saved')} className={`rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200 ${tapClass}`}>
                 Saved homes
-              </button>
-              <button type="button" onClick={() => onNavigate('messages')} className={`rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200 ${tapClass}`}>
+              </InstantButton>
+              <InstantButton onPress={() => onNavigate('messages')} className={`rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200 ${tapClass}`}>
                 Messages
-              </button>
+              </InstantButton>
             </div>
 
             <div className="space-y-2">
@@ -1830,9 +1815,9 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                     <SelectField label="Role" value={role} onChange={setRole} options={ACCOUNT_ROLES} />
                     <InputField label="Telegram / WhatsApp" value={telegram} onChange={setTelegram} placeholder="@username or phone number" />
                     <div className="rounded-2xl bg-stone-950/40 px-4 py-3 text-sm text-stone-400">{currentProfile?.email || currentUserEmail || 'Signed in'}</div>
-                    <button type="button" onClick={saveProfile} disabled={saving} className={`rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 ${tapClass}`}>
+                    <InstantButton onPress={saveProfile} disabled={saving} className={`rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 ${tapClass}`}>
                       {saving ? 'Saving...' : 'Save profile'}
-                    </button>
+                    </InstantButton>
                   </div>
                 </div>
               ) : null}
@@ -1850,14 +1835,14 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                 {myListings.length ? (
                   myListings.map((listing) => (
                     <div key={listing.id} className="rounded-2xl bg-stone-950/40 p-3">
-                      <button type="button" onClick={() => onOpenListing(listing)} className={`flex w-full items-center justify-between gap-3 text-left ${tapClass}`}>
+                      <InstantButton onPress={() => onOpenListing(listing)} className={`flex w-full items-center justify-between gap-3 text-left ${tapClass}`}>
                         <div>
                           <div className="font-medium">{listingTitle(listing)}</div>
                           <div className="mt-1 text-xs text-stone-500">{listing.city || listing.location || 'Location not set'} - {(listing.photos || []).length} photo{(listing.photos || []).length === 1 ? '' : 's'}</div>
                           <div className="mt-1 text-sm text-stone-400">{formatPrice(listing.price, listing.currency)} - {listing.listingType}</div>
                         </div>
                         <ChevronRight className="h-4 w-4 text-stone-500" />
-                      </button>
+                      </InstantButton>
                       <div className="mt-3">
                         <div className="mb-2 flex items-center justify-between text-xs text-stone-500">
                           <span>Status</span>
@@ -1866,12 +1851,12 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                         <SegmentGroup value={listing.status || 'active'} options={LISTING_STATUS_OPTIONS} onChange={(status) => updateStatus(listing, status)} />
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => onStartEdit(listing)} className={`rounded-2xl bg-white/8 px-3 py-2 text-sm ${tapClass}`}>
+                        <InstantButton onPress={() => onStartEdit(listing)} className={`rounded-2xl bg-white/8 px-3 py-2 text-sm ${tapClass}`}>
                           Edit
-                        </button>
-                        <button type="button" onClick={() => onDeleteListing(listing)} className={`rounded-2xl bg-red-500/15 px-3 py-2 text-sm text-red-200 ${tapClass}`}>
+                        </InstantButton>
+                        <InstantButton onPress={() => onDeleteListing(listing)} className={`rounded-2xl bg-red-500/15 px-3 py-2 text-sm text-red-200 ${tapClass}`}>
                           Delete
-                        </button>
+                        </InstantButton>
                       </div>
                     </div>
                   ))
@@ -1883,10 +1868,10 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
               ) : null}
             </div>
 
-            <button type="button" onClick={onSignOut} className={`flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm ${tapClass}`}>
+            <InstantButton onPress={onSignOut} className={`flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm ${tapClass}`}>
               <LogOut className="h-4 w-4" />
               Sign out
-            </button>
+            </InstantButton>
           </>
         )}
       </div>
@@ -2062,6 +2047,15 @@ export default function App() {
         console.error('ensureCurrentProfile:', error);
       }
     }
+    if (profile?.disabled) {
+      await signOut();
+      setCurrentUserId(null);
+      setCurrentUserEmail('');
+      setCurrentProfile(null);
+      setSavedIds([]);
+      setMyListingRows([]);
+      throw new Error('This account has been disabled. Contact support for help.');
+    }
     const [saved, mine] = await Promise.all([
       loadSavedIds(userId),
       loadMyListings(userId),
@@ -2102,7 +2096,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    writeSessionJson(SHOP_STATE_STORAGE_KEY, {
+    scheduleSessionJson(SHOP_STATE_STORAGE_KEY, {
       query,
       filters,
       resultsOpen,
@@ -2146,23 +2140,36 @@ export default function App() {
       setLoading(true);
       setBootError('');
       try {
-        const user = await withTimeout(
-          getCurrentUser(),
-          'Loading is taking too long. Please check your connection and try again.',
-        );
+        window.sessionStorage.removeItem('melaHomesListingsCache');
+      } catch {
+        // Older versions used a listings cache; live data is safer.
+      }
+      try {
+        const [user, data] = await Promise.all([
+          withTimeout(
+            getCurrentUser(),
+            'Loading is taking too long. Please check your connection and try again.',
+          ),
+          withTimeout(
+            loadListings(),
+            'Listings are taking too long to load. Please try again.',
+          ),
+        ]);
         const userId = user?.id || null;
-        const data = await withTimeout(
-          loadListings(),
-          'Listings are taking too long to load. Please try again.',
-        );
         if (!active) return;
         setListings(data);
         setCurrentUserId(userId);
         setCurrentUserEmail(user?.email || '');
-        await withTimeout(
+        setLoading(false);
+        withTimeout(
           refreshProfile(userId),
           'Your account is taking too long to load. Please try again.',
-        );
+        ).catch((error) => {
+          if (!active) return;
+          const message = error.message || 'Could not finish loading your account';
+          setBootError(message);
+          show(message, 'error');
+        });
       } catch (error) {
         const message = error.message || 'Could not load app';
         if (active) setBootError(message);
@@ -2179,7 +2186,11 @@ export default function App() {
       const userId = user?.id || null;
       setCurrentUserId(userId);
       setCurrentUserEmail(user?.email || '');
-      await refreshProfile(userId);
+      try {
+        await refreshProfile(userId);
+      } catch (error) {
+        show(error.message || 'Could not refresh account', 'error');
+      }
     });
 
     return () => {
