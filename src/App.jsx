@@ -1727,6 +1727,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
     ['Saved', savedCount],
     ['Unread', unreadMessages],
   ];
+  const tapClass = 'touch-manipulation select-none';
 
   const toggleSection = (section) => setOpenSection((current) => (current === section ? null : section));
 
@@ -1736,7 +1737,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
       <button
         type="button"
         onClick={onClick || (() => toggleSection(section))}
-        className="flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left active:bg-white/10"
+        className={`flex w-full items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left active:bg-white/10 ${tapClass}`}
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-stone-950/50 text-emerald-300">
           <Icon className="h-5 w-5" />
@@ -1756,7 +1757,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
       <button
         type="button"
         onClick={() => onThemeChange(value)}
-        className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}
+        className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold ${tapClass} ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}
       >
         {label}
       </button>
@@ -1787,7 +1788,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
   );
 
   return (
-    <div className="pb-24">
+    <div className="touch-manipulation pb-24">
       <TopBar title="Account" subtitle={currentUserId ? 'Manage your profile and listings' : 'Sign in to post and save'} />
       <div className="space-y-4 px-4 pt-4">
         {!currentUserId ? (
@@ -1807,13 +1808,13 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={() => onNavigate('sell')} className="rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-semibold text-stone-950">
+              <button type="button" onClick={() => onNavigate('sell')} className={`rounded-2xl bg-emerald-500 px-3 py-3 text-sm font-semibold text-stone-950 ${tapClass}`}>
                 Post listing
               </button>
-              <button type="button" onClick={() => onNavigate('saved')} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200">
+              <button type="button" onClick={() => onNavigate('saved')} className={`rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200 ${tapClass}`}>
                 Saved homes
               </button>
-              <button type="button" onClick={() => onNavigate('messages')} className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200">
+              <button type="button" onClick={() => onNavigate('messages')} className={`rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-stone-200 ${tapClass}`}>
                 Messages
               </button>
             </div>
@@ -1829,7 +1830,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                     <SelectField label="Role" value={role} onChange={setRole} options={ACCOUNT_ROLES} />
                     <InputField label="Telegram / WhatsApp" value={telegram} onChange={setTelegram} placeholder="@username or phone number" />
                     <div className="rounded-2xl bg-stone-950/40 px-4 py-3 text-sm text-stone-400">{currentProfile?.email || currentUserEmail || 'Signed in'}</div>
-                    <button type="button" onClick={saveProfile} disabled={saving} className="rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
+                    <button type="button" onClick={saveProfile} disabled={saving} className={`rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 ${tapClass}`}>
                       {saving ? 'Saving...' : 'Save profile'}
                     </button>
                   </div>
@@ -1849,7 +1850,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                 {myListings.length ? (
                   myListings.map((listing) => (
                     <div key={listing.id} className="rounded-2xl bg-stone-950/40 p-3">
-                      <button type="button" onClick={() => onOpenListing(listing)} className="flex w-full items-center justify-between gap-3 text-left">
+                      <button type="button" onClick={() => onOpenListing(listing)} className={`flex w-full items-center justify-between gap-3 text-left ${tapClass}`}>
                         <div>
                           <div className="font-medium">{listingTitle(listing)}</div>
                           <div className="mt-1 text-xs text-stone-500">{listing.city || listing.location || 'Location not set'} - {(listing.photos || []).length} photo{(listing.photos || []).length === 1 ? '' : 's'}</div>
@@ -1865,10 +1866,10 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
                         <SegmentGroup value={listing.status || 'active'} options={LISTING_STATUS_OPTIONS} onChange={(status) => updateStatus(listing, status)} />
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => onStartEdit(listing)} className="rounded-2xl bg-white/8 px-3 py-2 text-sm">
+                        <button type="button" onClick={() => onStartEdit(listing)} className={`rounded-2xl bg-white/8 px-3 py-2 text-sm ${tapClass}`}>
                           Edit
                         </button>
-                        <button type="button" onClick={() => onDeleteListing(listing)} className="rounded-2xl bg-red-500/15 px-3 py-2 text-sm text-red-200">
+                        <button type="button" onClick={() => onDeleteListing(listing)} className={`rounded-2xl bg-red-500/15 px-3 py-2 text-sm text-red-200 ${tapClass}`}>
                           Delete
                         </button>
                       </div>
@@ -1882,7 +1883,7 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
               ) : null}
             </div>
 
-            <button type="button" onClick={onSignOut} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
+            <button type="button" onClick={onSignOut} className={`flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm ${tapClass}`}>
               <LogOut className="h-4 w-4" />
               Sign out
             </button>
@@ -2124,7 +2125,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (selectedListing || adminOpen) return undefined;
+    if (selectedListing || adminOpen || tab !== 'discover') return undefined;
     const savedScroll = tabScrollRef.current[tab] || 0;
     const frame = window.requestAnimationFrame(() => {
       window.scrollTo({ top: savedScroll, left: 0, behavior: 'auto' });
