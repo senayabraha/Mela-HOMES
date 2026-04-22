@@ -2054,6 +2054,7 @@ export default function App() {
       setCurrentUserEmail('');
       setSavedIds([]);
       setMyListingRows([]);
+      setBootError('');
       return;
     }
     let profile = await getCurrentProfile(userId);
@@ -2080,6 +2081,7 @@ export default function App() {
     setCurrentProfile(profile);
     setSavedIds(saved);
     setMyListingRows(mine);
+    setBootError('');
   };
 
   const captureTabScroll = () => {
@@ -2165,13 +2167,27 @@ export default function App() {
         // Older versions used a listings cache; live data is safer.
       }
       try {
+        const userRequest = getCurrentUser().then((user) => {
+          if (!active) return user;
+          const userId = user?.id || null;
+          setCurrentUserId(userId);
+          setCurrentUserEmail(user?.email || '');
+          return user;
+        });
+        const listingsRequest = loadListings().then((data) => {
+          if (active) {
+            setListings(data);
+            setBootError('');
+          }
+          return data;
+        });
         const [user, data] = await Promise.all([
           withTimeout(
-            getCurrentUser(),
+            userRequest,
             'Loading is taking too long. Please check your connection and try again.',
           ),
           withTimeout(
-            loadListings(),
+            listingsRequest,
             'Listings are taking too long to load. Please try again.',
           ),
         ]);
@@ -2184,12 +2200,16 @@ export default function App() {
         withTimeout(
           refreshProfile(userId),
           'Your account is taking too long to load. Please try again.',
-        ).catch((error) => {
-          if (!active) return;
-          const message = error.message || 'Could not finish loading your account';
-          setBootError(message);
-          show(message, 'error');
-        });
+        )
+          .then(() => {
+            if (active) setBootError('');
+          })
+          .catch((error) => {
+            if (!active) return;
+            const message = error.message || 'Could not finish loading your account';
+            setBootError(message);
+            show(message, 'error');
+          });
       } catch (error) {
         const message = error.message || 'Could not load app';
         if (active) setBootError(message);
@@ -2208,6 +2228,7 @@ export default function App() {
       setCurrentUserEmail(user?.email || '');
       try {
         await refreshProfile(userId);
+        setBootError('');
       } catch (error) {
         show(error.message || 'Could not refresh account', 'error');
       }
