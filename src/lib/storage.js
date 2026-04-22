@@ -26,9 +26,9 @@ function profileFromAuthUser(user) {
 
 export async function getCurrentUser() {
   if (_cachedUser) return _cachedUser;
-  const { data, error } = await supabase.auth.getUser();
-  if (error) { console.error('getUser:', error); return null; }
-  _cachedUser = data.user ?? null;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) { console.error('getSession:', error); return null; }
+  _cachedUser = data.session?.user ?? null;
   return _cachedUser;
 }
 
@@ -278,6 +278,7 @@ export async function getCurrentUserId() {
 export async function signInWithEmail(email, password) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
+  _cachedUser = data.user ?? null;
   const profile = await getCurrentProfile(data.user.id);
   if (profile?.disabled) {
     _cachedUser = null;
@@ -290,6 +291,7 @@ export async function signInWithEmail(email, password) {
 export async function signUpWithEmail(email, password, profileData = {}) {
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
+  _cachedUser = data.user ?? null;
   if (data.user) {
     const { error: profileError } = await supabase.from('profiles').insert({
       id: data.user.id,

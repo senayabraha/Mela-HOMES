@@ -91,6 +91,7 @@ function useToast() {
 }
 
 const APP_BOOT_TIMEOUT_MS = 12000;
+const APP_BOOT_SPLASH_MS = 1800;
 const SHOP_STATE_STORAGE_KEY = 'melaHomesShopState';
 const TAB_SCROLL_STORAGE_KEY = 'melaHomesTabScroll';
 
@@ -1886,14 +1887,25 @@ function AuthModal({ mode, onClose, onSuccess, onToast }) {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const submit = async (event) => {
-    event.preventDefault();
+  const submitAuth = async () => {
+    if (loading) return;
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      onToast('Enter your email and password', 'info');
+      return;
+    }
     setLoading(true);
     try {
       if (mode === 'signin') {
-        await signInWithEmail(email, password);
+        await withTimeout(
+          signInWithEmail(trimmedEmail, password),
+          'Sign in is taking too long. Please check your connection and try again.',
+        );
       } else {
-        await signUpWithEmail(email, password, { name, phone });
+        await withTimeout(
+          signUpWithEmail(trimmedEmail, password, { name, phone }),
+          'Account creation is taking too long. Please check your connection and try again.',
+        );
       }
       onSuccess();
     } catch (error) {
@@ -1901,6 +1913,11 @@ function AuthModal({ mode, onClose, onSuccess, onToast }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const submit = (event) => {
+    event.preventDefault();
+    submitAuth();
   };
 
   const handleReset = async () => {
@@ -1930,9 +1947,9 @@ function AuthModal({ mode, onClose, onSuccess, onToast }) {
           {mode === 'signup' ? <InputField label="Phone" value={phone} onChange={setPhone} /> : null}
           <InputField label="Email" value={email} onChange={setEmail} type="email" />
           <InputField label="Password" value={password} onChange={setPassword} type="password" />
-          <button type="submit" disabled={loading} className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950">
+          <InstantButton onPress={submitAuth} disabled={loading} className="w-full rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-stone-950 disabled:opacity-60">
             {loading ? 'Please wait...' : mode === 'signin' ? 'Sign in' : 'Create account'}
-          </button>
+          </InstantButton>
         </form>
         <div className="mt-3 flex items-center justify-between text-sm">
           <button type="button" onClick={handleReset} className="text-stone-400">
@@ -2136,6 +2153,9 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    const splashTimer = window.setTimeout(() => {
+      if (active) setLoading(false);
+    }, APP_BOOT_SPLASH_MS);
     const boot = async () => {
       setLoading(true);
       setBootError('');
@@ -2195,6 +2215,7 @@ export default function App() {
 
     return () => {
       active = false;
+      window.clearTimeout(splashTimer);
       listener.subscription.unsubscribe();
     };
   }, [bootAttempt]);
