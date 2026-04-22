@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bath,
   BedDouble,
@@ -130,6 +130,16 @@ function writeSessionJson(key, value) {
   } catch {
     // Session storage can be unavailable in strict privacy modes.
   }
+}
+
+function scheduleSessionJson(key, value) {
+  if (typeof window === 'undefined') return;
+  const save = () => writeSessionJson(key, value);
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(save, { timeout: 500 });
+    return;
+  }
+  window.setTimeout(save, 0);
 }
 
 
@@ -2008,6 +2018,7 @@ export default function App() {
   const [resultsOpen, setResultsOpen] = useState(() => Boolean(initialShopState?.resultsOpen));
   const [selectedThreadId, setSelectedThreadId] = useState(null);
   const tabScrollRef = useRef(readSessionJson(TAB_SCROLL_STORAGE_KEY, {}));
+  const currentTabRef = useRef(tab);
   const [readAtByThread, setReadAtByThread] = useState(() => {
     try {
       return JSON.parse(window.localStorage.getItem('melaHomesThreadReads') || '{}');
@@ -2061,15 +2072,18 @@ export default function App() {
 
   const captureTabScroll = () => {
     if (typeof window === 'undefined') return;
+    const activeTab = currentTabRef.current;
     tabScrollRef.current = {
       ...tabScrollRef.current,
-      [tab]: window.scrollY,
+      [activeTab]: window.scrollY,
     };
-    writeSessionJson(TAB_SCROLL_STORAGE_KEY, tabScrollRef.current);
+    scheduleSessionJson(TAB_SCROLL_STORAGE_KEY, tabScrollRef.current);
   };
 
   const navigateTab = (nextTab, { closeShopResults = false } = {}) => {
+    if (nextTab === currentTabRef.current && !closeShopResults) return;
     captureTabScroll();
+    currentTabRef.current = nextTab;
     setAdminOpen(false);
     setTab(nextTab);
     if (nextTab !== 'sell') setEditingListing(null);
@@ -2095,6 +2109,10 @@ export default function App() {
   }, [filters, query, resultsOpen]);
 
   useEffect(() => {
+    currentTabRef.current = tab;
+  }, [tab]);
+
+  useEffect(() => {
     const saveCurrentScroll = () => captureTabScroll();
     window.addEventListener('pagehide', saveCurrentScroll);
     window.addEventListener('beforeunload', saveCurrentScroll);
@@ -2103,9 +2121,9 @@ export default function App() {
       window.removeEventListener('pagehide', saveCurrentScroll);
       window.removeEventListener('beforeunload', saveCurrentScroll);
     };
-  }, [tab]);
+  }, []);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (selectedListing || adminOpen) return undefined;
     const savedScroll = tabScrollRef.current[tab] || 0;
     const frame = window.requestAnimationFrame(() => {
