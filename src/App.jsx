@@ -91,6 +91,8 @@ function useToast() {
 }
 
 const APP_BOOT_TIMEOUT_MS = 12000;
+const APP_ACCOUNT_TIMEOUT_MS = 7000;
+const APP_LISTINGS_TIMEOUT_MS = 9000;
 const APP_BOOT_SPLASH_MS = 1800;
 const SHOP_STATE_STORAGE_KEY = 'melaHomesShopState';
 const TAB_SCROLL_STORAGE_KEY = 'melaHomesTabScroll';
@@ -2158,6 +2160,55 @@ export default function App() {
     const splashTimer = window.setTimeout(() => {
       if (active) setLoading(false);
     }, APP_BOOT_SPLASH_MS);
+
+    const hydrateAccount = async () => {
+      const accountRequest = getCurrentUser().then(async (user) => {
+        if (!active) return user;
+        const userId = user?.id || null;
+        setCurrentUserId(userId);
+        setCurrentUserEmail(user?.email || '');
+        await refreshProfile(userId);
+        if (active) setBootError('');
+        return user;
+      });
+
+      try {
+        await withTimeout(
+          accountRequest,
+          'Your account is taking too long to load. You can keep browsing while it syncs.',
+          APP_ACCOUNT_TIMEOUT_MS,
+        );
+      } catch (error) {
+        if (!active) return;
+        console.info('hydrateAccount:', error.message || error);
+      }
+    };
+
+    const refreshPublicListings = async () => {
+      const listingsRequest = loadListings().then((data) => {
+        if (active) {
+          setListings(data);
+          setBootError('');
+        }
+        return data;
+      });
+
+      try {
+        await withTimeout(
+          listingsRequest,
+          'Listings are taking too long to load. Please check your connection and try again.',
+          APP_LISTINGS_TIMEOUT_MS,
+        );
+      } catch (error) {
+        if (!active) return;
+        const message = error.message || 'Could not refresh listings';
+        setBootError(message);
+        show(message, 'error');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
     const boot = async () => {
       setLoading(true);
       setBootError('');
@@ -2166,72 +2217,31 @@ export default function App() {
       } catch {
         // Older versions used a listings cache; live data is safer.
       }
-      try {
-        const userRequest = getCurrentUser().then((user) => {
-          if (!active) return user;
-          const userId = user?.id || null;
-          setCurrentUserId(userId);
-          setCurrentUserEmail(user?.email || '');
-          return user;
-        });
-        const listingsRequest = loadListings().then((data) => {
-          if (active) {
-            setListings(data);
-            setBootError('');
-          }
-          return data;
-        });
-        const [user, data] = await Promise.all([
-          withTimeout(
-            userRequest,
-            'Loading is taking too long. Please check your connection and try again.',
-          ),
-          withTimeout(
-            listingsRequest,
-            'Listings are taking too long to load. Please try again.',
-          ),
-        ]);
-        const userId = user?.id || null;
-        if (!active) return;
-        setListings(data);
-        setCurrentUserId(userId);
-        setCurrentUserEmail(user?.email || '');
-        setLoading(false);
-        withTimeout(
-          refreshProfile(userId),
-          'Your account is taking too long to load. Please try again.',
-        )
-          .then(() => {
-            if (active) setBootError('');
-          })
-          .catch((error) => {
-            if (!active) return;
-            const message = error.message || 'Could not finish loading your account';
-            setBootError(message);
-            show(message, 'error');
-          });
-      } catch (error) {
-        const message = error.message || 'Could not load app';
-        if (active) setBootError(message);
-        show(message, 'error');
-      } finally {
-        if (active) setLoading(false);
-      }
+      refreshPublicListings();
+      hydrateAccount();
     };
     boot();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       const user = session?.user || null;
       setCachedUser(user);
       const userId = user?.id || null;
       setCurrentUserId(userId);
       setCurrentUserEmail(user?.email || '');
-      try {
-        await refreshProfile(userId);
-        setBootError('');
-      } catch (error) {
-        show(error.message || 'Could not refresh account', 'error');
-      }
+      window.setTimeout(() => {
+        if (!active) return;
+        withTimeout(
+          refreshProfile(userId),
+          'Your account is taking too long to refresh. You can keep browsing while it syncs.',
+          APP_ACCOUNT_TIMEOUT_MS,
+        )
+          .then(() => {
+            if (active) setBootError('');
+          })
+          .catch((error) => {
+            console.info('refreshProfile:', error.message || error);
+          });
+      }, 0);
     });
 
     return () => {
