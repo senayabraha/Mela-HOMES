@@ -94,6 +94,7 @@ const APP_BOOT_TIMEOUT_MS = 12000;
 const APP_ACCOUNT_TIMEOUT_MS = 7000;
 const APP_LISTINGS_TIMEOUT_MS = 9000;
 const APP_BOOT_SPLASH_MS = 1800;
+const APP_UNREAD_POLL_MS = 60000;
 const SHOP_STATE_STORAGE_KEY = 'melaHomesShopState';
 const TAB_SCROLL_STORAGE_KEY = 'melaHomesTabScroll';
 
@@ -479,7 +480,7 @@ function ListingCard({ listing, saved, onOpen, onToggleSave, ownListing }) {
       <button type="button" onClick={() => onOpen(listing)} className="block w-full text-left">
         <div className="relative h-52 bg-stone-900">
           {listing.photoUrl ? (
-            <img src={listing.photoUrl} alt={listingTitle(listing)} className="h-full w-full object-cover" />
+            <img src={listing.photoUrl} alt={listingTitle(listing)} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#1c2d25,#171717)]">
               <Home className="h-14 w-14 text-stone-500" />
@@ -530,7 +531,7 @@ function FeaturedListingCard({ listing, saved, onOpen, onToggleSave }) {
       <button type="button" onClick={() => onOpen(listing)} className="block w-full text-left">
         <div className="relative h-28 bg-stone-900">
           {listing.photoUrl ? (
-            <img src={listing.photoUrl} alt={listingTitle(listing)} className="h-full w-full object-cover" />
+            <img src={listing.photoUrl} alt={listingTitle(listing)} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#1c2d25,#171717)]">
               <Home className="h-9 w-9 text-stone-500" />
@@ -635,7 +636,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
       <button type="button" onClick={() => onOpen(listing)} className="block w-full text-left">
         <div className="relative h-[220px] bg-neutral-800">
           {listing.photoUrl ? (
-            <img src={listing.photoUrl} alt={listingTitle(listing)} className="h-full w-full object-cover" />
+            <img src={listing.photoUrl} alt={listingTitle(listing)} loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center bg-[linear-gradient(135deg,#dfe4dc,#7d846a)]">
               <Home className="h-20 w-20 text-black/20" />
@@ -689,9 +690,7 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
   );
 }
 
-function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
-  const results = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
-  const featuredListings = useMemo(() => listings.filter((listing) => listing.featured), [listings]);
+function SearchResultsScreen({ results, featuredListings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const activeFilters = countActiveFilters(filters);
   return (
     <div className="min-h-screen bg-black pb-28">
@@ -745,8 +744,7 @@ function SearchResultsScreen({ listings, query, setQuery, filters, savedIds, onO
   );
 }
 
-function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage, resultsOpen, setResultsOpen }) {
-  const featuredListings = useMemo(() => listings.filter((listing) => listing.featured), [listings]);
+function DiscoverScreen({ featuredListings, filteredListings, query, setQuery, filters, setFilters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage, resultsOpen, setResultsOpen }) {
   const submit = () => {
     setQuery((value) => value.trim());
     setResultsOpen(true);
@@ -755,7 +753,8 @@ function DiscoverScreen({ listings, query, setQuery, filters, setFilters, savedI
   if (resultsOpen) {
     return (
       <SearchResultsScreen
-        listings={listings}
+        results={filteredListings}
+        featuredListings={featuredListings}
         query={query}
         setQuery={setQuery}
         filters={filters}
@@ -1332,6 +1331,8 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
+  const readAtByThreadRef = useRef(readAtByThread);
+  const activeThreadIdRef = useRef(null);
 
   const threadLabel = (thread) => {
     const other = thread.buyer_id === currentUserId ? thread.seller : thread.buyer;
@@ -1364,6 +1365,10 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
     return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
+  const sortThreadsByRecent = (items) => (
+    [...items].sort((a, b) => new Date(b.lastMessage?.created_at || b.created_at).getTime() - new Date(a.lastMessage?.created_at || a.created_at).getTime())
+  );
+
   const filteredThreads = useMemo(() => {
     const q = query.trim().toLowerCase();
     return threads.filter((thread) => {
@@ -1385,6 +1390,22 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
 
   const activeThread = filteredThreads.find((thread) => thread.id === selectedThreadId) || filteredThreads[0] || null;
 
+  useEffect(() => {
+    readAtByThreadRef.current = readAtByThread;
+    setThreads((prev) => prev.map((thread) => {
+      const readAt = readAtByThread[thread.id];
+      const lastTimestamp = new Date(thread.lastMessage?.created_at || thread.created_at).getTime();
+      if (readAt && lastTimestamp <= readAt && thread.unreadCount) {
+        return { ...thread, unreadCount: 0 };
+      }
+      return thread;
+    }));
+  }, [readAtByThread]);
+
+  useEffect(() => {
+    activeThreadIdRef.current = activeThread?.id || null;
+  }, [activeThread?.id]);
+
   const appendMessage = (message) => {
     setMessages((prev) => {
       if (prev.some((item) => item.id === message.id)) return prev;
@@ -1393,7 +1414,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
   };
 
   const refreshThreads = async () => {
-    const data = await loadThreads(readAtByThread);
+    const data = sortThreadsByRecent(await loadThreads(readAtByThreadRef.current));
     setThreads(data);
     if (!selectedThreadId && data[0]) onSelectThread(data[0].id);
   };
@@ -1408,7 +1429,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
     const run = async () => {
       setLoading(true);
       try {
-        const data = await loadThreads(readAtByThread);
+        const data = sortThreadsByRecent(await loadThreads(readAtByThreadRef.current));
         if (!active) return;
         setThreads(data);
         if (!selectedThreadId && data[0]) onSelectThread(data[0].id);
@@ -1422,7 +1443,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
     return () => {
       active = false;
     };
-  }, [currentUserId, readAtByThread]);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!activeThread?.id) {
@@ -1446,6 +1467,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
 
   useEffect(() => {
     if (!activeThread?.id || !currentUserId) return;
+    setThreads((prev) => prev.map((thread) => (thread.id === activeThread.id ? { ...thread, unreadCount: 0 } : thread)));
     onThreadRead(activeThread.id);
     markThreadRead(activeThread.id).catch((error) => console.info('markThreadRead:', error.message));
   }, [activeThread?.id, currentUserId]);
@@ -1460,8 +1482,13 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
       .channel(`messages-inbox-${currentUserId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
         const message = payload.new;
-        setThreads((prev) => prev.map((thread) => (thread.id === message.thread_id ? { ...thread, lastMessage: message, unreadCount: message.sender_id === currentUserId || thread.id === activeThread?.id ? 0 : (thread.unreadCount || 0) + 1 } : thread)));
-        if (message.thread_id === activeThread?.id) {
+        const isActiveThread = message.thread_id === activeThreadIdRef.current;
+        setThreads((prev) => sortThreadsByRecent(prev.map((thread) => (
+          thread.id === message.thread_id
+            ? { ...thread, lastMessage: message, unreadCount: message.sender_id === currentUserId || isActiveThread ? 0 : (thread.unreadCount || 0) + 1 }
+            : thread
+        ))));
+        if (isActiveThread) {
           appendMessage(message);
           onThreadRead(message.thread_id);
           markThreadRead(message.thread_id).catch(() => {});
@@ -1477,7 +1504,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, activeThread?.id, readAtByThread]);
+  }, [currentUserId]);
 
   const send = async (event) => {
     event.preventDefault();
@@ -1563,7 +1590,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
                       className={`flex w-full items-center gap-3 rounded-3xl border p-3 text-left ${activeThread?.id === thread.id ? 'border-emerald-400 bg-emerald-400/15' : unread ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-white/10 bg-white/5'}`}
                 >
                       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-900">
-                        {listing.photos?.[0] ? <img src={listing.photos[0]} alt="" className="h-full w-full object-cover" /> : <Building2 className="m-4 h-6 w-6 text-stone-600" />}
+                        {listing.photos?.[0] ? <img src={listing.photos[0]} alt="" loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover" /> : <Building2 className="m-4 h-6 w-6 text-stone-600" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -1590,7 +1617,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
               <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5">
                 <button type="button" onClick={() => activeThread.listing ? onOpenListing(rowToThreadListing(activeThread.listing)) : null} className="flex w-full items-center gap-3 border-b border-white/10 p-4 text-left">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-900">
-                    {activeThread.listing?.photos?.[0] ? <img src={activeThread.listing.photos[0]} alt="" className="h-full w-full object-cover" /> : <Building2 className="m-4 h-6 w-6 text-stone-600" />}
+                    {activeThread.listing?.photos?.[0] ? <img src={activeThread.listing.photos[0]} alt="" loading="lazy" decoding="async" fetchPriority="low" className="h-full w-full object-cover" /> : <Building2 className="m-4 h-6 w-6 text-stone-600" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold text-white">{activeThread.listing?.title || activeThread.listing?.property_type || 'Property listing'}</div>
@@ -2031,6 +2058,8 @@ export default function App() {
       return {};
     }
   });
+  const readAtByThreadRef = useRef(readAtByThread);
+  const myListingsLoadedForRef = useRef(null);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [pendingDeleteListing, setPendingDeleteListing] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2044,18 +2073,20 @@ export default function App() {
     ]);
     setListings(data);
     setMyListingRows(mine);
+    myListingsLoadedForRef.current = currentUserId || null;
     if (selectedListing) {
       const fresh = data.find((item) => item.id === selectedListing.id);
       setSelectedListing(fresh || null);
     }
   };
 
-  const refreshProfile = async (userId) => {
+  const refreshProfile = async (userId, { loadSaved = true, loadMine = false } = {}) => {
     if (!userId) {
       setCurrentProfile(null);
       setCurrentUserEmail('');
       setSavedIds([]);
       setMyListingRows([]);
+      myListingsLoadedForRef.current = null;
       setBootError('');
       return;
     }
@@ -2074,15 +2105,22 @@ export default function App() {
       setCurrentProfile(null);
       setSavedIds([]);
       setMyListingRows([]);
+      myListingsLoadedForRef.current = null;
       throw new Error('This account has been disabled. Contact support for help.');
     }
     const [saved, mine] = await Promise.all([
-      loadSavedIds(userId),
-      loadMyListings(userId),
+      loadSaved ? loadSavedIds(userId) : Promise.resolve(null),
+      loadMine ? loadMyListings(userId) : Promise.resolve(null),
     ]);
     setCurrentProfile(profile);
-    setSavedIds(saved);
-    setMyListingRows(mine);
+    if (saved) setSavedIds(saved);
+    if (loadMine) {
+      setMyListingRows(mine || []);
+      myListingsLoadedForRef.current = userId;
+    } else if (myListingsLoadedForRef.current !== userId) {
+      setMyListingRows([]);
+      myListingsLoadedForRef.current = null;
+    }
     setBootError('');
   };
 
@@ -2115,6 +2153,10 @@ export default function App() {
     captureTabScroll();
     setAdminOpen(true);
   };
+
+  useEffect(() => {
+    readAtByThreadRef.current = readAtByThread;
+  }, [readAtByThread]);
 
   useEffect(() => {
     scheduleSessionJson(SHOP_STATE_STORAGE_KEY, {
@@ -2167,7 +2209,9 @@ export default function App() {
         const userId = user?.id || null;
         setCurrentUserId(userId);
         setCurrentUserEmail(user?.email || '');
-        await refreshProfile(userId);
+        await refreshProfile(userId, {
+          loadMine: currentTabRef.current === 'account' || currentTabRef.current === 'sell',
+        });
         if (active) setBootError('');
         return user;
       });
@@ -2231,7 +2275,9 @@ export default function App() {
       window.setTimeout(() => {
         if (!active) return;
         withTimeout(
-          refreshProfile(userId),
+          refreshProfile(userId, {
+            loadMine: currentTabRef.current === 'account' || currentTabRef.current === 'sell',
+          }),
           'Your account is taking too long to refresh. You can keep browsing while it syncs.',
           APP_ACCOUNT_TIMEOUT_MS,
         )
@@ -2263,15 +2309,42 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUserId) {
+      myListingsLoadedForRef.current = null;
+      setMyListingRows([]);
+      return undefined;
+    }
+    if (tab !== 'account' && tab !== 'sell') return undefined;
+    if (myListingsLoadedForRef.current === currentUserId) return undefined;
+
+    let active = true;
+    loadMyListings(currentUserId)
+      .then((mine) => {
+        if (!active) return;
+        myListingsLoadedForRef.current = currentUserId;
+        setMyListingRows(mine);
+      })
+      .catch((error) => console.error('loadMyListings:', error));
+
+    return () => {
+      active = false;
+    };
+  }, [currentUserId, tab]);
+
+  useEffect(() => {
+    if (!currentUserId) {
       setUnreadMessages(0);
       setReadAtByThread({});
+      return undefined;
+    }
+    if (tab === 'messages') {
+      setUnreadMessages(0);
       return undefined;
     }
 
     let active = true;
     const refreshUnread = async () => {
       try {
-        const count = await loadUnreadMessageCount(readAtByThread);
+        const count = await loadUnreadMessageCount(readAtByThreadRef.current);
         if (active) setUnreadMessages(count);
       } catch (error) {
         console.error('loadUnreadMessageCount:', error);
@@ -2279,12 +2352,12 @@ export default function App() {
     };
 
     refreshUnread();
-    const timer = window.setInterval(refreshUnread, 15000);
+    const timer = window.setInterval(refreshUnread, APP_UNREAD_POLL_MS);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [currentUserId, readAtByThread]);
+  }, [currentUserId, tab]);
 
   useEffect(() => {
     try {
@@ -2319,6 +2392,8 @@ export default function App() {
     setReadAtByThread((prev) => ({ ...prev, [threadId]: Date.now() }));
   };
 
+  const filteredListings = useMemo(() => listings.filter((listing) => matchesFilters(listing, query, filters)), [filters, listings, query]);
+  const featuredListings = useMemo(() => listings.filter((listing) => listing.featured), [listings]);
   const myListings = useMemo(() => myListingRows.filter((listing) => currentUserId && listing.sellerId === currentUserId), [currentUserId, myListingRows]);
   const isAdmin = isAdminProfile(currentProfile);
 
@@ -2420,7 +2495,8 @@ export default function App() {
     if (tab === 'discover') {
       return (
         <DiscoverScreen
-          listings={listings}
+          featuredListings={featuredListings}
+          filteredListings={filteredListings}
           query={query}
           setQuery={setQuery}
           filters={filters}
@@ -2569,7 +2645,7 @@ export default function App() {
           filters={filters}
           setFilters={setFilters}
           onClose={() => setFiltersOpen(false)}
-          totalResults={listings.filter((listing) => matchesFilters(listing, query, filters)).length}
+          totalResults={filteredListings.length}
         />
       ) : null}
 

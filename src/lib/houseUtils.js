@@ -43,7 +43,7 @@ export function isAdminProfile(profile) {
 export function matchesFilters(listing, query, filters) {
   const text = query.trim().toLowerCase();
   if (text) {
-    const haystack = [
+    const haystack = listing.searchText || [
       listingTitle(listing),
       listing.propertyType,
       listing.listingType,

@@ -355,6 +355,18 @@ export async function ensureCurrentProfile(profileData = {}) {
 function rowToListing(r) {
   const seller = r.seller || {};
   const photos = Array.isArray(r.photos) ? r.photos : [];
+  const searchText = [
+    r.title,
+    r.property_type,
+    r.listing_type,
+    r.city,
+    r.area,
+    r.country,
+    r.description,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
   return {
     id: r.id,
     propertyType: r.property_type,
@@ -396,6 +408,7 @@ function rowToListing(r) {
     sellerEmail: seller.email || '',
     dealer: seller.role === 'dealer',
     featured: r.featured || false,
+    searchText,
   };
 }
 
