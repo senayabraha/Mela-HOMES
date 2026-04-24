@@ -314,7 +314,6 @@ export async function signOut() {
 export async function getCurrentProfile(userId) {
   const id = userId || await uid();
   if (!id) return null;
-  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('profiles')
     .select('*')
@@ -322,9 +321,12 @@ export async function getCurrentProfile(userId) {
     .maybeSingle();
   if (error) {
     console.error('getCurrentProfile:', error);
+    const user = await getCurrentUser();
     return user?.id === id ? profileFromAuthUser(user) : null;
   }
-  return data || (user?.id === id ? profileFromAuthUser(user) : null);
+  if (data) return data;
+  const user = await getCurrentUser();
+  return user?.id === id ? profileFromAuthUser(user) : null;
 }
 
 export async function ensureCurrentProfile(profileData = {}) {

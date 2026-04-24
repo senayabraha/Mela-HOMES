@@ -31,7 +31,6 @@ import { supabase } from './lib/supabase';
 import {
   deleteListing,
   ensureCurrentProfile,
-  getCurrentUser,
   getCurrentProfile,
   loadThreadMessages,
   loadThreadReadMap,
@@ -2203,31 +2202,6 @@ export default function App() {
       if (active) setLoading(false);
     }, APP_BOOT_SPLASH_MS);
 
-    const hydrateAccount = async () => {
-      const accountRequest = getCurrentUser().then(async (user) => {
-        if (!active) return user;
-        const userId = user?.id || null;
-        setCurrentUserId(userId);
-        setCurrentUserEmail(user?.email || '');
-        await refreshProfile(userId, {
-          loadMine: currentTabRef.current === 'account' || currentTabRef.current === 'sell',
-        });
-        if (active) setBootError('');
-        return user;
-      });
-
-      try {
-        await withTimeout(
-          accountRequest,
-          'Your account is taking too long to load. You can keep browsing while it syncs.',
-          APP_ACCOUNT_TIMEOUT_MS,
-        );
-      } catch (error) {
-        if (!active) return;
-        console.info('hydrateAccount:', error.message || error);
-      }
-    };
-
     const refreshPublicListings = async () => {
       const listingsRequest = loadListings().then((data) => {
         if (active) {
@@ -2262,7 +2236,7 @@ export default function App() {
         // Older versions used a listings cache; live data is safer.
       }
       refreshPublicListings();
-      hydrateAccount();
+      // onAuthStateChange fires INITIAL_SESSION immediately and calls refreshProfile — no separate hydrateAccount needed.
     };
     boot();
 
