@@ -11,7 +11,7 @@ import {
   Heart,
   Home,
   LogOut,
-  Map,
+  ArrowUpDown,
   MapPin,
   MessageCircle,
   Palette,
@@ -689,13 +689,35 @@ function ResultListingCard({ listing, saved, onOpen, onToggleSave, onMessage }) 
   );
 }
 
+const SORT_OPTIONS = [
+  { key: 'newest', label: 'Newest' },
+  { key: 'price_asc', label: 'Price: Low–High' },
+  { key: 'price_desc', label: 'Price: High–Low' },
+];
+
 function SearchResultsScreen({ results, featuredListings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const activeFilters = countActiveFilters(filters);
+  const [sortBy, setSortBy] = useState('newest');
+
+  const cycleSort = () => {
+    setSortBy((prev) => {
+      const idx = SORT_OPTIONS.findIndex((o) => o.key === prev);
+      return SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length].key;
+    });
+  };
+
+  const sortedResults = useMemo(() => {
+    if (sortBy === 'price_asc') return [...results].sort((a, b) => (a.price || 0) - (b.price || 0));
+    if (sortBy === 'price_desc') return [...results].sort((a, b) => (b.price || 0) - (a.price || 0));
+    return results;
+  }, [results, sortBy]);
+
+  const currentSortLabel = SORT_OPTIONS.find((o) => o.key === sortBy)?.label ?? 'Newest';
+
   return (
     <div className="min-h-screen bg-black pb-28">
       <div className="sticky top-0 z-20 bg-black">
         <div className="flex items-center gap-3 px-4 pt-4">
-          <Map className="h-5 w-5 text-emerald-300" />
           <label className="flex h-11 flex-1 items-center gap-2 rounded-sm border border-white/25 bg-[#15161b] px-3">
             <Search className="h-4 w-4 text-stone-200" />
             <input
@@ -715,6 +737,14 @@ function SearchResultsScreen({ results, featuredListings, query, setQuery, filte
             >
               Filters{activeFilters ? ` ${activeFilters}` : ''}
             </button>
+            <button
+              type="button"
+              onClick={cycleSort}
+              className="flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 text-xs font-medium text-stone-300 active:bg-white/10"
+            >
+              <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+              {currentSortLabel}
+            </button>
           </div>
         </div>
       </div>
@@ -722,8 +752,8 @@ function SearchResultsScreen({ results, featuredListings, query, setQuery, filte
       <FeaturedListings listings={featuredListings} onOpen={onOpenListing} savedIds={savedIds} onToggleSave={onToggleSave} />
 
       <div className="mt-3 space-y-4">
-        {results.length ? (
-          results.map((listing) => (
+        {sortedResults.length ? (
+          sortedResults.map((listing) => (
             <ResultListingCard
               key={listing.id}
               listing={listing}
