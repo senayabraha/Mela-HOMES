@@ -698,13 +698,17 @@ const SORT_OPTIONS = [
 function SearchResultsScreen({ results, featuredListings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const activeFilters = countActiveFilters(filters);
   const [sortBy, setSortBy] = useState('newest');
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef(null);
 
-  const cycleSort = () => {
-    setSortBy((prev) => {
-      const idx = SORT_OPTIONS.findIndex((o) => o.key === prev);
-      return SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length].key;
-    });
-  };
+  useEffect(() => {
+    if (!sortOpen) return undefined;
+    const handler = (e) => {
+      if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false);
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
+  }, [sortOpen]);
 
   const sortedResults = useMemo(() => {
     if (sortBy === 'price_asc') return [...results].sort((a, b) => (a.price || 0) - (b.price || 0));
@@ -737,14 +741,32 @@ function SearchResultsScreen({ results, featuredListings, query, setQuery, filte
             >
               Filters{activeFilters ? ` ${activeFilters}` : ''}
             </button>
-            <button
-              type="button"
-              onClick={cycleSort}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 text-xs font-medium text-stone-300 active:bg-white/10"
-            >
-              <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
-              {currentSortLabel}
-            </button>
+            <div ref={sortRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setSortOpen((o) => !o)}
+                className="flex h-8 items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 text-xs font-medium text-stone-300 active:bg-white/10"
+              >
+                <ArrowUpDown className="h-3.5 w-3.5 shrink-0" />
+                {currentSortLabel}
+                <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${sortOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {sortOpen ? (
+                <div className="absolute right-0 top-full mt-1 min-w-[160px] overflow-hidden rounded-xl border border-white/10 bg-stone-900 shadow-xl">
+                  {SORT_OPTIONS.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => { setSortBy(option.key); setSortOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-4 py-3 text-left text-sm ${sortBy === option.key ? 'bg-emerald-500/15 text-emerald-300' : 'text-stone-300 active:bg-white/5'}`}
+                    >
+                      {sortBy === option.key ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> : <span className="h-1.5 w-1.5" />}
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
