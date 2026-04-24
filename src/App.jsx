@@ -1744,7 +1744,7 @@ function rowToThreadListing(row) {
   };
 }
 
-function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, savedCount, unreadMessages, themeMode, onThemeChange, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin, onNavigate, onUpdateListingStatus }) {
+function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, savedCount, unreadMessages, themeMode, resolvedTheme, onThemeChange, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin, onNavigate, onUpdateListingStatus, onToast }) {
   const [name, setName] = useState(currentProfile?.name || '');
   const [phone, setPhone] = useState(currentProfile?.phone || '');
   const [businessName, setBusinessName] = useState(currentProfile?.business_name || '');
@@ -1773,6 +1773,8 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
         telegram: telegram.trim() || null,
       });
       await onProfileSaved();
+    } catch (error) {
+      onToast?.(error.message || 'Could not save profile', 'error');
     } finally {
       setSaving(false);
     }
@@ -1832,21 +1834,14 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
 
   const appearanceControls = (
     <>
-      <SectionButton section="appearance" icon={Palette} label="Appearance" detail={`Current: ${themeMode}`} />
+      <SectionButton section="appearance" icon={Palette} label="Appearance" detail={themeMode === 'system' ? `Auto (${resolvedTheme})` : themeMode === 'dark' ? 'Dark mode' : 'Light mode'} />
       {openSection === 'appearance' ? (
         <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-white">Appearance</div>
-              <p className="mt-1 text-xs text-stone-500">Keep the premium dark look or preview a cleaner light marketplace style.</p>
-            </div>
-            <div className="rounded-full border border-white/10 bg-stone-950/40 px-2 py-1 text-[10px] uppercase tracking-wide text-stone-400">
-              {themeMode}
-            </div>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <ThemeButton value="dark" label="Dark" />
-            <ThemeButton value="light" label="Light" />
+          <p className="mb-3 text-xs text-stone-500">Choose dark for the premium look or light for a brighter marketplace style.</p>
+          <div className="flex gap-2">
+            <ThemeButton value="dark" label="🌙 Dark" />
+            <ThemeButton value="light" label="☀️ Light" />
+            <ThemeButton value="system" label="Auto" />
           </div>
         </div>
       ) : null}
@@ -2241,11 +2236,30 @@ export default function App() {
     return () => window.cancelAnimationFrame(frame);
   }, [adminOpen, selectedListing, tab]);
 
+  const resolvedTheme = useMemo(() => {
+    if (themeMode === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return themeMode;
+  }, [themeMode]);
+
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', themeMode === 'dark');
-    document.documentElement.classList.toggle('theme-dark', themeMode === 'dark');
-    document.documentElement.classList.toggle('theme-light', themeMode === 'light');
-    window.localStorage.setItem('themeMode', themeMode);
+    if (themeMode !== 'system') {
+      document.documentElement.classList.toggle('dark', themeMode === 'dark');
+      document.documentElement.classList.toggle('theme-light', themeMode === 'light');
+      window.localStorage.setItem('themeMode', themeMode);
+      return undefined;
+    }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = (dark) => {
+      document.documentElement.classList.toggle('dark', dark);
+      document.documentElement.classList.toggle('theme-light', !dark);
+    };
+    apply(mq.matches);
+    const handler = (e) => apply(e.matches);
+    mq.addEventListener('change', handler);
+    window.localStorage.setItem('themeMode', 'system');
+    return () => mq.removeEventListener('change', handler);
   }, [themeMode]);
 
   useEffect(() => {
@@ -2601,6 +2615,7 @@ export default function App() {
         savedCount={savedIds.length}
         unreadMessages={unreadMessages}
         themeMode={themeMode}
+        resolvedTheme={resolvedTheme}
         onThemeChange={setThemeMode}
         onOpenListing={openListing}
         onDeleteListing={requestDeleteListing}
@@ -2618,6 +2633,7 @@ export default function App() {
           navigateTab(nextTab);
         }}
         onUpdateListingStatus={handleUpdateListingStatus}
+        onToast={show}
         onSignOut={async () => {
           await signOut();
           setCurrentUserId(null);
@@ -2635,7 +2651,7 @@ export default function App() {
   };
 
   return (
-    <Shell themeMode={themeMode}>
+    <Shell themeMode={resolvedTheme}>
       {loading ? (
         <div className="flex min-h-screen items-center justify-center px-6">
           <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-6 text-center">
