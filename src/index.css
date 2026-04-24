@@ -264,11 +264,6 @@ button,
   color: #ffffff !important;
 }
 
-.theme-light .bg-emerald-500 .text-stone-800\/70,
-.theme-light .bg-emerald-600 .text-stone-800\/70,
-.theme-light .bg-emerald-700 .text-stone-800\/70 {
-  color: rgba(255, 255, 255, 0.7) !important;
-}
 
 .theme-light .bg-red-600 {
   background-color: #dc2626 !important;

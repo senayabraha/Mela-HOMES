@@ -697,8 +697,14 @@ const SORT_OPTIONS = [
 
 function SearchResultsScreen({ results, featuredListings, query, setQuery, filters, savedIds, onOpenListing, onToggleSave, onOpenFilters, onMessage }) {
   const activeFilters = countActiveFilters(filters);
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] = useState(() => {
+    try { return window.sessionStorage.getItem('melaHomesSortBy') || 'newest'; } catch { return 'newest'; }
+  });
   const [sortOpen, setSortOpen] = useState(false);
+
+  useEffect(() => {
+    try { window.sessionStorage.setItem('melaHomesSortBy', sortBy); } catch {}
+  }, [sortBy]);
   const sortRef = useRef(null);
 
   useEffect(() => {
@@ -1691,7 +1697,7 @@ function MessagesScreen({ currentUserId, selectedThreadId, readAtByThread, onSel
                             <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm ${mine ? 'bg-emerald-500 text-stone-950' : 'bg-stone-950/70 text-stone-100'}`}>
                               {!mine ? <div className="mb-1 text-[11px] font-semibold text-stone-400">{threadLabel(activeThread)}</div> : null}
                               <div>{message.body}</div>
-                              <div className={`mt-1 text-[10px] ${mine ? 'text-stone-800/70' : 'text-stone-500'}`}>{message.failed ? 'Failed - tap send again' : message.sending ? 'Sending...' : formatTime(message.created_at)}</div>
+                              <div className={`mt-1 text-[10px] ${mine ? 'text-white/70' : 'text-stone-500'}`}>{message.failed ? 'Failed - tap send again' : message.sending ? 'Sending...' : formatTime(message.created_at)}</div>
                             </div>
                           </div>
                         </React.Fragment>
@@ -1742,6 +1748,18 @@ function rowToThreadListing(row) {
     sellerId: row.seller_id,
     status: row.status,
   };
+}
+
+function ThemeButton({ value, label, themeMode, onThemeChange }) {
+  const active = themeMode === value;
+  return (
+    <InstantButton
+      onPress={() => onThemeChange(value)}
+      className={`flex-1 select-none rounded-2xl border px-4 py-3 text-sm font-semibold ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}
+    >
+      {label}
+    </InstantButton>
+  );
 }
 
 function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myListings, savedCount, unreadMessages, themeMode, resolvedTheme, onThemeChange, onOpenListing, onDeleteListing, onStartEdit, onOpenAuth, onSignOut, onProfileSaved, onOpenAdmin, onNavigate, onUpdateListingStatus, onToast }) {
@@ -1820,17 +1838,6 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
     );
   };
 
-  const ThemeButton = ({ value, label }) => {
-    const active = themeMode === value;
-    return (
-      <InstantButton
-        onPress={() => onThemeChange(value)}
-        className={`flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold ${tapClass} ${active ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200' : 'border-white/10 bg-stone-950/40 text-stone-400'}`}
-      >
-        {label}
-      </InstantButton>
-    );
-  };
 
   const appearanceControls = (
     <>
@@ -1839,9 +1846,9 @@ function AccountScreen({ currentProfile, currentUserId, currentUserEmail, myList
         <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
           <p className="mb-3 text-xs text-stone-500">Choose dark for the premium look or light for a brighter marketplace style.</p>
           <div className="flex gap-2">
-            <ThemeButton value="dark" label="🌙 Dark" />
-            <ThemeButton value="light" label="☀️ Light" />
-            <ThemeButton value="system" label="Auto" />
+            <ThemeButton value="dark" label="🌙 Dark" themeMode={themeMode} onThemeChange={onThemeChange} />
+            <ThemeButton value="light" label="☀️ Light" themeMode={themeMode} onThemeChange={onThemeChange} />
+            <ThemeButton value="system" label="Auto" themeMode={themeMode} onThemeChange={onThemeChange} />
           </div>
         </div>
       ) : null}
