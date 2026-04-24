@@ -1,5 +1,11 @@
 import { supabase } from './supabase';
 
+const ADMIN_POLICY_FILE = 'supabase-admin-featured-policies.sql';
+
+function adminActionBlockedMessage(action) {
+  return `${action}. Supabase RLS is blocking this admin action. Run ${ADMIN_POLICY_FILE} in the Supabase SQL Editor, then sign out and back in.`;
+}
+
 /*
   Supabase listings table columns needed:
   id, seller_id, property_type, listing_type, title,
@@ -553,18 +559,42 @@ export async function getAllReports() {
 }
 
 export async function adminDeleteListing(id) {
-  const { error } = await supabase.from("listings").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("listings")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    throw new Error(adminActionBlockedMessage("No listing was deleted"));
+  }
 }
 
 export async function adminUpdateProfile(userId, updates) {
-  const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq("id", userId)
+    .select("id")
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    throw new Error(adminActionBlockedMessage("No user profile was updated"));
+  }
 }
 
 export async function adminUpdateReport(reportId, updates) {
-  const { error } = await supabase.from("reports").update(updates).eq("id", reportId);
+  const { data, error } = await supabase
+    .from("reports")
+    .update(updates)
+    .eq("id", reportId)
+    .select("id")
+    .maybeSingle();
   if (error) throw error;
+  if (!data) {
+    throw new Error(adminActionBlockedMessage("No report was updated"));
+  }
 }
 
 export async function adminUpdateListing(id, updates) {
@@ -576,7 +606,7 @@ export async function adminUpdateListing(id, updates) {
     .maybeSingle();
   if (error) throw error;
   if (!data) {
-    throw new Error("No listing was updated. Supabase RLS is blocking this admin action. Run supabase-admin-featured-policies.sql in the Supabase SQL Editor, then sign out and back in.");
+    throw new Error(adminActionBlockedMessage("No listing was updated"));
   }
   return rowToAdminListing(data);
 }

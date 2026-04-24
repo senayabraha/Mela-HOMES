@@ -1,5 +1,6 @@
 alter table public.profiles
-  add column if not exists is_admin boolean not null default false;
+  add column if not exists is_admin boolean not null default false,
+  add column if not exists disabled boolean not null default false;
 
 alter table public.listings
   add column if not exists featured boolean not null default false,
@@ -61,5 +62,92 @@ begin
       for select
       to authenticated
       using (public.is_current_user_admin());
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'listings'
+      and policyname = 'Admins can delete all listings'
+  ) then
+    create policy "Admins can delete all listings"
+      on public.listings
+      for delete
+      to authenticated
+      using (public.is_current_user_admin());
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and policyname = 'Admins can read all profiles'
+  ) then
+    create policy "Admins can read all profiles"
+      on public.profiles
+      for select
+      to authenticated
+      using (public.is_current_user_admin());
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'profiles'
+      and policyname = 'Admins can update all profiles'
+  ) then
+    create policy "Admins can update all profiles"
+      on public.profiles
+      for update
+      to authenticated
+      using (public.is_current_user_admin())
+      with check (public.is_current_user_admin());
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'reports'
+      and policyname = 'Admins can read all reports'
+  ) then
+    create policy "Admins can read all reports"
+      on public.reports
+      for select
+      to authenticated
+      using (public.is_current_user_admin());
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'reports'
+      and policyname = 'Admins can update all reports'
+  ) then
+    create policy "Admins can update all reports"
+      on public.reports
+      for update
+      to authenticated
+      using (public.is_current_user_admin())
+      with check (public.is_current_user_admin());
   end if;
 end $$;
