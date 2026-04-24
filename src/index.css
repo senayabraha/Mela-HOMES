@@ -229,6 +229,10 @@ button,
   background: linear-gradient(180deg, #f8fafc 0%, #eef7f1 48%, #f8fafc 100%) !important;
 }
 
+.theme-light .landing-hero {
+  background: linear-gradient(180deg, #ffffff 0%, #f4fbf7 52%, #ffffff 100%) !important;
+}
+
 .theme-light .rounded-3xl.border,
 .theme-light .rounded-2xl.border,
 .theme-light .rounded-xl.border,

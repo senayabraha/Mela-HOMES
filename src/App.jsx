@@ -821,7 +821,7 @@ function DiscoverScreen({ featuredListings, filteredListings, query, setQuery, f
 
   return (
     <div className="pb-24">
-      <div className="relative flex h-56 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-black via-emerald-950/40 to-neutral-950">
+      <div className="landing-hero relative flex h-56 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-black via-emerald-950/40 to-neutral-950">
         <h1 className="text-center text-5xl font-bold leading-tight tracking-tight text-white">
           Mela <span className="text-emerald-500">Homes</span>
         </h1>
@@ -2074,8 +2074,8 @@ function ToggleField({ label, checked, onChange }) {
 export default function App() {
   const { toast, show, clear } = useToast();
   const [themeMode, setThemeMode] = useState(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return window.localStorage.getItem('themeMode') || 'dark';
+    if (typeof window === 'undefined') return 'system';
+    return window.localStorage.getItem('themeMode') || 'system';
   });
   const [tab, setTab] = useState('discover');
   const [listings, setListings] = useState([]);
@@ -2678,7 +2678,14 @@ export default function App() {
             </div>
           ) : null}
           {content()}
-          {!selectedListing && !adminOpen ? <TabBar tab={tab} onChange={(nextTab) => navigateTab(nextTab)} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
+          {!selectedListing && !adminOpen ? <TabBar tab={tab} onChange={(nextTab) => {
+            if (nextTab === 'discover') {
+              navigateTab('discover', { closeShopResults: true });
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              navigateTab(nextTab);
+            }
+          }} unreadSaved={savedIds.length} unreadMessages={unreadMessages} /> : null}
         </>
       )}
 
