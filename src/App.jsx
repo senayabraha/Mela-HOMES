@@ -309,10 +309,10 @@ function TabBar({ tab, onChange, unreadSaved, unreadMessages }) {
 
 function SearchBar({ query, onChange, onSubmit }) {
   return (
-    <div className="px-5 pt-6">
-      <div className="flex items-center gap-2 rounded-full border border-neutral-700 bg-neutral-950 px-5">
+    <div className="px-5 pt-4">
+      <div className="flex h-12 items-center gap-2 rounded-full border border-neutral-700 bg-neutral-950 px-4">
         <Search className="h-5 w-5 text-neutral-400" />
-        <label className="flex flex-1 items-center gap-3 py-4">
+        <label className="flex flex-1 items-center gap-3">
           <input
             value={query}
             onChange={(event) => onChange(event.target.value)}
@@ -333,12 +333,14 @@ function SearchBar({ query, onChange, onSubmit }) {
   );
 }
 
-function ShopLocationCard({ onApply }) {
+function LocationPeel({ onApply }) {
+  const [open, setOpen] = useState(false);
   const [country, setCountry] = useState('Ethiopia');
   const [region, setRegion] = useState('');
   const [city, setCity] = useState('');
   const [area, setArea] = useState('');
-  const selectCls = 'w-full h-12 rounded-xl bg-neutral-950 border border-neutral-800 px-4 text-white text-sm outline-none focus:border-emerald-500';
+  const selectCls = 'h-11 w-full rounded-xl border border-neutral-800 bg-neutral-950 px-3 text-sm text-white outline-none focus:border-emerald-500';
+  const locationLabel = area || city || region || country;
 
   const apply = () => {
     onApply({
@@ -347,13 +349,37 @@ function ShopLocationCard({ onApply }) {
       city: city || null,
       area: area || null,
     });
+    setOpen(false);
   };
 
   return (
-    <div className="mx-4 mt-8 overflow-hidden rounded-3xl bg-gradient-to-b from-emerald-700 to-emerald-900 p-6 pb-8">
-      <h2 className="text-center text-2xl font-bold text-white">Find homes near you</h2>
-      <p className="mt-1.5 text-center text-emerald-100">Pick your country and area to see local listings.</p>
-      <div className="mt-5 space-y-3 rounded-2xl border border-neutral-800 bg-neutral-950 p-4">
+    <div className="absolute right-4 top-4 z-30">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex max-w-[168px] items-center gap-2 rounded-bl-3xl rounded-br-lg rounded-tl-lg rounded-tr-3xl border border-white/15 bg-neutral-950/90 px-3 py-2 text-left text-white shadow-2xl shadow-black/30 backdrop-blur"
+        aria-expanded={open}
+        aria-label="Set location"
+      >
+        <MapPin className="h-4 w-4 shrink-0 text-emerald-300" />
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold">{locationLabel}</span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-neutral-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open ? (
+        <>
+          <button type="button" className="fixed inset-0 z-30 cursor-default bg-black/20" aria-label="Close location picker" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-12 z-40 w-[min(21rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-neutral-950 p-4 shadow-2xl shadow-black/40">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-white">Find homes near you</h2>
+                <p className="mt-1 text-xs text-neutral-400">Choose a country and area.</p>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} className="rounded-full bg-white/8 p-2 text-neutral-300" aria-label="Close location picker">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
         <div>
           <div className="mb-1.5 text-xs text-neutral-400">Country</div>
           <select
@@ -428,8 +454,11 @@ function ShopLocationCard({ onApply }) {
         <button type="button" onClick={apply} className="mt-2 h-12 w-full rounded-full bg-emerald-700 font-medium text-white">
           Show homes in this area
         </button>
+            </div>
+          </div>
+        </>
+      ) : null}
       </div>
-    </div>
   );
 }
 
@@ -576,7 +605,7 @@ function FeaturedListings({ listings, onOpen, savedIds, onToggleSave }) {
   if (!listings || listings.length === 0) return null;
 
   return (
-    <div className="mb-2 mt-4 px-4">
+    <div className="mb-2 mt-3 px-4 pb-24">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Featured</h2>
         <div className="flex gap-2">
@@ -826,37 +855,14 @@ function DiscoverScreen({ featuredListings, filteredListings, query, setQuery, f
   }
 
   return (
-    <div className="pb-24">
-      <div className="landing-hero relative flex h-56 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-black via-emerald-950/40 to-neutral-950">
+    <div className="relative">
+      <div className="landing-hero relative flex h-52 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-black via-emerald-950/40 to-neutral-950">
         <h1 className="text-center text-5xl font-bold leading-tight tracking-tight text-white">
           Mela <span className="text-emerald-500">Homes</span>
         </h1>
         <p className="mt-3 text-[15px] tracking-wide text-neutral-300">Discover your dream home</p>
       </div>
-      <SearchBar query={query} onChange={setQuery} onSubmit={submit} />
-      <div className="px-5 pt-6">
-        <button
-          type="button"
-          onClick={() => {
-            setFilters((prev) => ({ ...prev, listingType: 'For Sale' }));
-            setResultsOpen(true);
-          }}
-          className="h-14 w-full rounded-full bg-emerald-700 text-[16px] font-medium text-white"
-        >
-          House for Sale
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setFilters((prev) => ({ ...prev, listingType: 'For Rent' }));
-            setResultsOpen(true);
-          }}
-          className="mt-3 h-14 w-full rounded-full border border-neutral-600 text-[16px] font-medium text-white"
-        >
-          House for Rent
-        </button>
-      </div>
-      <ShopLocationCard
+      <LocationPeel
         onApply={(locationFilters) =>
           {
             setFilters((prev) => ({
@@ -867,6 +873,29 @@ function DiscoverScreen({ featuredListings, filteredListings, query, setQuery, f
           }
         }
       />
+      <SearchBar query={query} onChange={setQuery} onSubmit={submit} />
+      <div className="grid grid-cols-2 gap-3 px-5 pt-3">
+        <button
+          type="button"
+          onClick={() => {
+            setFilters((prev) => ({ ...prev, listingType: 'For Sale' }));
+            setResultsOpen(true);
+          }}
+          className="h-12 w-full rounded-full bg-emerald-700 text-[15px] font-medium text-white"
+        >
+          House for Sale
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setFilters((prev) => ({ ...prev, listingType: 'For Rent' }));
+            setResultsOpen(true);
+          }}
+          className="h-12 w-full rounded-full border border-neutral-600 text-[15px] font-medium text-white"
+        >
+          House for Rent
+        </button>
+      </div>
       <FeaturedListings listings={featuredListings} onOpen={onOpenListing} savedIds={savedIds} onToggleSave={onToggleSave} />
     </div>
   );
